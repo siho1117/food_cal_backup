@@ -650,72 +650,208 @@ class _DateOfBirthPickerDialogState extends State<DateOfBirthPickerDialog> {
     return '$age years';
   }
 
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color primaryBlue = const Color(0xFF0052CC);
 
-    return AlertDialog(
-      title: const Text('Date of Birth'),
-      content: SizedBox(
-        height: 240,
-        child: Column(
-          children: [
-            // Age display
-            Text(
-              'Age: ${_calculateAge(_selectedDate)}',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+    return Dialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: SizedBox(
+        width: MediaQuery.of(context).size.width * 0.9,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Title
+              const Text(
+                'Date of Birth',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
 
-            const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
-            // Date display
-            Text(
-              '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: primaryBlue,
+              // Age display
+              Text(
+                'Age: ${_calculateAge(_selectedDate)}',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
 
-            const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
-            // Date picker
-            Expanded(
-              child: CupertinoDatePicker(
-                mode: CupertinoDatePickerMode.date,
-                initialDateTime: _selectedDate,
-                maximumDate: DateTime.now(),
-                minimumDate: DateTime(1923), // 100 years ago
-                onDateTimeChanged: (date) {
-                  setState(() {
-                    _selectedDate = date;
-                  });
-                },
+              // Date display
+              Text(
+                _formatDate(_selectedDate),
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: primaryBlue,
+                ),
               ),
-            ),
-          ],
+
+              const SizedBox(height: 16),
+
+              // Date picker - make it taller and wider
+              SizedBox(
+                height: 200,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Month picker
+                    Expanded(
+                      child: CupertinoPicker(
+                        itemExtent: 40,
+                        looping: true,
+                        onSelectedItemChanged: (index) {
+                          setState(() {
+                            _selectedDate = DateTime(
+                              _selectedDate.year,
+                              index + 1,
+                              _selectedDate.day,
+                            );
+                          });
+                        },
+                        scrollController: FixedExtentScrollController(
+                          initialItem: _selectedDate.month - 1,
+                        ),
+                        children: [
+                          'January',
+                          'February',
+                          'March',
+                          'April',
+                          'May',
+                          'June',
+                          'July',
+                          'August',
+                          'September',
+                          'October',
+                          'November',
+                          'December'
+                        ]
+                            .map((month) => Center(
+                                  child: Text(
+                                    month,
+                                    style: const TextStyle(fontSize: 18),
+                                  ),
+                                ))
+                            .toList(),
+                      ),
+                    ),
+
+                    // Day picker
+                    Expanded(
+                      child: CupertinoPicker(
+                        itemExtent: 40,
+                        looping: true,
+                        onSelectedItemChanged: (index) {
+                          setState(() {
+                            _selectedDate = DateTime(
+                              _selectedDate.year,
+                              _selectedDate.month,
+                              index + 1,
+                            );
+                          });
+                        },
+                        scrollController: FixedExtentScrollController(
+                          initialItem: _selectedDate.day - 1,
+                        ),
+                        children: List.generate(
+                            31,
+                            (index) => Center(
+                                  child: Text(
+                                    '${index + 1}',
+                                    style: const TextStyle(fontSize: 18),
+                                  ),
+                                )),
+                      ),
+                    ),
+
+                    // Year picker
+                    Expanded(
+                      child: CupertinoPicker(
+                        itemExtent: 40,
+                        onSelectedItemChanged: (index) {
+                          setState(() {
+                            _selectedDate = DateTime(
+                              DateTime.now().year - index,
+                              _selectedDate.month,
+                              _selectedDate.day,
+                            );
+                          });
+                        },
+                        scrollController: FixedExtentScrollController(
+                          initialItem: DateTime.now().year - _selectedDate.year,
+                        ),
+                        children: List.generate(
+                            100,
+                            (index) => Center(
+                                  child: Text(
+                                    '${DateTime.now().year - index}',
+                                    style: const TextStyle(fontSize: 18),
+                                  ),
+                                )),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Buttons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  // Cancel button
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+
+                  // Save button
+                  ElevatedButton(
+                    onPressed: () {
+                      widget.onDateSelected(_selectedDate);
+                      Navigator.of(context).pop();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryBlue,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 40,
+                        vertical: 12,
+                      ),
+                    ),
+                    child: const Text(
+                      'Save',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            widget.onDateSelected(_selectedDate);
-            Navigator.of(context).pop();
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: primaryBlue,
-          ),
-          child: const Text('Save'),
-        ),
-      ],
     );
   }
 }
@@ -987,6 +1123,7 @@ class ActivityLevelDialog extends StatelessWidget {
           shrinkWrap: true,
           itemCount: levels.length,
           itemBuilder: (context, index) {
+            final level = levels[index];
             final level = levels[index];
             final isSelected = level['level'] == currentLevel;
 

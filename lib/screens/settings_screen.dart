@@ -3,7 +3,12 @@ import 'package:intl/intl.dart';
 import '../data/repositories/user_repository.dart';
 import '../data/models/user_profile.dart';
 import '../data/models/weight_entry.dart';
-import '../widgets/settings_widgets.dart';
+import '../widgets/settings/profile_picture_widget.dart';
+import '../widgets/settings/date_picker_dialog.dart';
+import '../widgets/settings/height_picker_dialog.dart';
+import '../widgets/settings/gender_selection_dialog.dart';
+import '../widgets/settings/activity_level_dialog.dart';
+import '../widgets/settings/feedback_widget.dart';
 import '../widgets/weight_entry_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -26,7 +31,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   double? _currentWeight;
   bool _isMetric = true;
   bool _isLoading = true;
-  String _appTheme = 'system';
   String? _avatarUrl;
 
   @override
@@ -253,49 +257,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  // Data management functions
-  void _exportData() {
-    // Implementation for data export
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Data exported successfully'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  void _importData() {
-    // Implementation for data import
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Data imported successfully'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  Future<void> _clearData() async {
-    // Implementation for clearing data
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('All data has been cleared'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
   // Feedback function
   void _sendFeedback() {
     // Implementation for sending feedback
-  }
-
-  // Theme change function
-  void _changeTheme(String theme) {
-    setState(() {
-      _appTheme = theme;
-    });
-
-    // Implementation for theme change
   }
 
   @override
@@ -490,58 +454,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         }
                       },
                     ),
-
-                    const Divider(height: 1),
-
-                    // Theme
-                    ThemeSelectorWidget(
-                      currentTheme: _appTheme,
-                      onThemeChanged: _changeTheme,
-                    ),
                   ],
                 ),
               ),
 
               const SizedBox(height: 30),
 
-              // Data management section
+              // Feedback section
               Text(
-                'DATA MANAGEMENT',
+                'FEEDBACK',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: primaryBlue,
                 ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Data management card
-              DataManagementWidget(
-                onExport: _exportData,
-                onImport: _importData,
-                onClearData: _clearData,
-              ),
-
-              const SizedBox(height: 30),
-
-              // About section
-              Text(
-                'ABOUT',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: primaryBlue,
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // About app card
-              AboutAppWidget(
-                appVersion: '1.0.0',
-                onViewPrivacyPolicy: () {},
-                onViewTerms: () {},
               ),
 
               const SizedBox(height: 16),
