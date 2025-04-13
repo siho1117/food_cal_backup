@@ -1,0 +1,104 @@
+class UserProfile {
+  final String id;
+  final String? name;
+  final int? age;
+  final double? height; // Stored in cm
+  final bool isMetric; // User's preferred unit system
+  final String? gender;
+  final double? goalWeight; // Stored in kg
+  final double? activityLevel; // 1.2 (sedentary) - 1.9 (very active)
+  final DateTime? birthDate; // New field for date of birth
+
+  UserProfile({
+    required this.id,
+    this.name,
+    this.age,
+    this.height,
+    this.isMetric = true,
+    this.gender,
+    this.goalWeight,
+    this.activityLevel,
+    this.birthDate,
+  });
+
+  // Copy constructor for updating user profile
+  UserProfile copyWith({
+    String? id,
+    String? name,
+    int? age,
+    double? height,
+    bool? isMetric,
+    String? gender,
+    double? goalWeight,
+    double? activityLevel,
+    DateTime? birthDate,
+  }) {
+    return UserProfile(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      age: age ?? this.age,
+      height: height ?? this.height,
+      isMetric: isMetric ?? this.isMetric,
+      gender: gender ?? this.gender,
+      goalWeight: goalWeight ?? this.goalWeight,
+      activityLevel: activityLevel ?? this.activityLevel,
+      birthDate: birthDate ?? this.birthDate,
+    );
+  }
+
+  // Calculate BMI if height and latest weight are available
+  double? calculateBMI(double weight) {
+    if (height == null || height! <= 0) return null;
+
+    // BMI = weight(kg) / (height(m))²
+    final heightInMeters = height! / 100;
+    return weight / (heightInMeters * heightInMeters);
+  }
+
+  // Format height based on user's preferred unit system
+  String formattedHeight() {
+    if (height == null) return 'Not set';
+
+    if (isMetric) {
+      return '$height cm';
+    } else {
+      // Convert cm to feet and inches
+      final totalInches = height! / 2.54;
+      final feet = (totalInches / 12).floor();
+      final inches = (totalInches % 12).round();
+      return '$feet\' $inches"';
+    }
+  }
+
+  // Convert to map for storage
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'age': age,
+      'height': height,
+      'isMetric': isMetric,
+      'gender': gender,
+      'goalWeight': goalWeight,
+      'activityLevel': activityLevel,
+      'birthDate': birthDate?.millisecondsSinceEpoch,
+    };
+  }
+
+  // Create from map for retrieval
+  factory UserProfile.fromMap(Map<String, dynamic> map) {
+    return UserProfile(
+      id: map['id'],
+      name: map['name'],
+      age: map['age'],
+      height: map['height'],
+      isMetric: map['isMetric'] ?? true,
+      gender: map['gender'],
+      goalWeight: map['goalWeight'],
+      activityLevel: map['activityLevel'],
+      birthDate: map['birthDate'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['birthDate'])
+          : null,
+    );
+  }
+}
