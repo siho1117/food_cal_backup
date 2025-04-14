@@ -155,8 +155,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
               GestureDetector(
                 onTap: _showWeightEntryDialog,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
@@ -232,57 +231,62 @@ class _ProgressScreenState extends State<ProgressScreen> {
               const SizedBox(height: 20),
 
               // BMI and Body Fat widgets in a row
-              FutureBuilder<double?>(
-                future: _userRepository.calculateBMI(),
-                builder: (context, snapshot) {
-                  final bmiValue = snapshot.data;
-                  String classification = "Not set";
+              SizedBox(
+                height: 130, // Fixed height for both widgets
+                child: FutureBuilder<double?>(
+                  future: _userRepository.calculateBMI(),
+                  builder: (context, snapshot) {
+                    final bmiValue = snapshot.data;
+                    String classification = "Not set";
 
-                  if (bmiValue != null) {
-                    classification =
-                        _userRepository.getBMIClassification(bmiValue);
-                  }
+                    if (bmiValue != null) {
+                      classification =
+                          _userRepository.getBMIClassification(bmiValue);
+                    }
 
-                  // Extract profile data needed for body fat calculation
-                  final String? gender = _userProfile?.gender;
-                  final int? age = _userProfile?.age;
+                    // Extract profile data needed for body fat calculation
+                    final String? gender = _userProfile?.gender;
+                    final int? age = _userProfile?.age;
 
-                  // Calculate body fat using the improved formula
-                  final bodyFatValue = _calculateBodyFat(bmiValue, age, gender);
-                  String bodyFatClassification = "Not set";
+                    // Calculate body fat using the improved formula
+                    final bodyFatValue =
+                        _calculateBodyFat(bmiValue, age, gender);
+                    String bodyFatClassification = "";
 
-                  if (bodyFatValue != null) {
-                    bodyFatClassification =
-                        _getBodyFatClassification(bodyFatValue, gender);
-                  }
+                    if (bodyFatValue != null) {
+                      bodyFatClassification =
+                          _getBodyFatClassification(bodyFatValue, gender);
+                    }
 
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // BMI Widget
-                      BMIWidget(
-                        bmiValue: bmiValue,
-                        classification: classification,
-                      ),
+                    return Row(
+                      children: [
+                        // BMI Widget
+                        BMIWidget(
+                          bmiValue: bmiValue,
+                          classification: classification,
+                        ),
 
-                      // Body Fat Widget - now includes isEstimated flag
-                      BodyFatWidget(
-                        bodyFatPercentage: bodyFatValue,
-                        classification: bodyFatClassification,
-                        isEstimated: true, // Shows "Estimated" label
-                      ),
-                    ],
-                  );
-                },
+                        const SizedBox(width: 16),
+
+                        // Body Fat Widget
+                        BodyFatWidget(
+                          bodyFatPercentage: bodyFatValue,
+                          classification: bodyFatClassification,
+                          isEstimated: true,
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
 
-              const SizedBox(height: 30),
+              const SizedBox(height: 20),
 
               // Weekly summary
-              Text(
+              const Text(
                 'WEEKLY OVERVIEW',
                 style: TextStyle(
-                  fontSize: 24,
+                  fontSize: 20,
                   fontWeight: FontWeight.w600,
                   color: AppTheme.primaryBlue,
                 ),
@@ -293,7 +297,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
               // Weekly chart widget
               const WeeklyChartWidget(),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
               // Stats section
               Row(
@@ -320,13 +324,13 @@ class _ProgressScreenState extends State<ProgressScreen> {
                 ],
               ),
 
-              const SizedBox(height: 30),
+              const SizedBox(height: 20),
 
               // Nutrition breakdown
-              Text(
+              const Text(
                 'NUTRITION BREAKDOWN',
                 style: TextStyle(
-                  fontSize: 24,
+                  fontSize: 20,
                   fontWeight: FontWeight.w600,
                   color: AppTheme.primaryBlue,
                 ),
