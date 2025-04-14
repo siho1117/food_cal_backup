@@ -7,6 +7,7 @@ import 'screens/camera_screen.dart';
 import 'screens/exercise_screen.dart';
 import 'screens/settings_screen.dart';
 import 'widgets/custom_bottom_nav.dart';
+import 'widgets/custom_app_bar.dart';
 
 void main() {
   runApp(const MyApp());
@@ -70,9 +71,20 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
     });
   }
 
+  void _navigateToSettings() {
+    setState(() {
+      _currentIndex = 4; // Index for settings screen
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: _currentIndex == 2
+          ? null // No app bar for camera screen
+          : CustomAppBar(
+              onSettingsTap: _navigateToSettings,
+            ),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 300),
         transitionBuilder: (Widget child, Animation<double> animation) {
@@ -89,7 +101,7 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
         },
         child: _screens[_currentIndex],
       ),
-      extendBody: true, // Important for transparent bottom nav
+      extendBody: true, // Important for curved navigation bar
       bottomNavigationBar: CustomBottomNav(
         currentIndex: _currentIndex,
         onTap: _onItemTapped,

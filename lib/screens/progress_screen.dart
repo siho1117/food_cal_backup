@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
-import '../widgets/weight_entry_widget.dart';
+import '../widgets/weight_entry_dialog.dart'; // Changed from weight_entry_widget.dart
 import '../data/repositories/user_repository.dart';
 import '../data/models/weight_entry.dart';
+import '../widgets/progress/bmi_widget.dart';
+import '../widgets/progress/stat_card_widget.dart';
+import '../widgets/progress/weekly_chart_widget.dart';
+import '../widgets/progress/nutrition_chart_widget.dart';
+import '../config/theme.dart';
 
 class ProgressScreen extends StatefulWidget {
   const ProgressScreen({Key? key}) : super(key: key);
@@ -11,10 +16,6 @@ class ProgressScreen extends StatefulWidget {
 }
 
 class _ProgressScreenState extends State<ProgressScreen> {
-  // Color constants to replace AppTheme
-  final Color primaryBlue = const Color(0xFF0052CC);
-  final Color secondaryBeige = const Color(0xFFF5EFE0);
-
   // User data
   double _currentWeight = 70.0; // Default in kg
   bool _isMetric = true;
@@ -49,15 +50,12 @@ class _ProgressScreenState extends State<ProgressScreen> {
   void _showWeightEntryDialog() {
     showDialog(
       context: context,
-      barrierDismissible: false, // User must tap a button to dismiss dialog
-      barrierColor:
-          Colors.black.withOpacity(0.8), // Makes background opaque/dark
-      builder: (context) => WeightEntryWidget(
+      builder: (context) => WeightEntryDialog(
+        // Now using WeightEntryDialog instead
         initialWeight: _currentWeight,
         isMetric: _isMetric,
         onWeightSaved: (weight, isMetric) async {
           setState(() {
-            // Weight is already in metric as the widget handles conversion
             _currentWeight = weight;
             _isMetric = isMetric;
           });
@@ -82,71 +80,17 @@ class _ProgressScreenState extends State<ProgressScreen> {
     return displayWeight.toStringAsFixed(1) + (_isMetric ? ' kg' : ' lbs');
   }
 
-  // Calculate BMI if height is available
-  Future<String> _getBmiText() async {
-    final bmi = await _userRepository.calculateBMI();
-    if (bmi == null) {
-      return 'Set height in profile';
-    }
-
-    final classification = _userRepository.getBMIClassification(bmi);
-    return '${bmi.toStringAsFixed(1)} - $classification';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: secondaryBeige,
+      backgroundColor: AppTheme.secondaryBeige,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
-              Row(
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'FOOD CAL',
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: primaryBlue,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'YOUR PROGRESS',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.calendar_today,
-                      color: primaryBlue,
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 30),
-
-              // Current Weight Card
+              // Current Weight Card - directly integrated in this file
               GestureDetector(
                 onTap: _showWeightEntryDialog,
                 child: Container(
@@ -170,12 +114,12 @@ class _ProgressScreenState extends State<ProgressScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: primaryBlue.withOpacity(0.1),
+                          color: AppTheme.primaryBlue.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.monitor_weight,
-                          color: primaryBlue,
+                          color: AppTheme.primaryBlue,
                           size: 22,
                         ),
                       ),
@@ -210,12 +154,12 @@ class _ProgressScreenState extends State<ProgressScreen> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: primaryBlue.withOpacity(0.1),
+                          color: AppTheme.primaryBlue.withOpacity(0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.edit,
-                          color: primaryBlue,
+                          color: AppTheme.primaryBlue,
                           size: 18,
                         ),
                       ),
@@ -226,68 +170,24 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
               const SizedBox(height: 20),
 
-              // BMI Card
-              FutureBuilder<String>(
-                  future: _getBmiText(),
-                  builder: (context, snapshot) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 10,
-                            spreadRadius: 0,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          // Icon
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(
-                              Icons.health_and_safety,
-                              color: Colors.green,
-                              size: 22,
-                            ),
-                          ),
+              // BMI Card with enhanced visualization
+              FutureBuilder<double?>(
+                future: _userRepository.calculateBMI(),
+                builder: (context, snapshot) {
+                  final bmiValue = snapshot.data;
+                  String classification = "Not set";
 
-                          const SizedBox(width: 16),
+                  if (bmiValue != null) {
+                    classification =
+                        _userRepository.getBMIClassification(bmiValue);
+                  }
 
-                          // Text
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Body Mass Index',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                snapshot.data ?? 'Calculating...',
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
+                  return BMIWidget(
+                    bmiValue: bmiValue,
+                    classification: classification,
+                  );
+                },
+              ),
 
               const SizedBox(height: 30),
 
@@ -297,91 +197,14 @@ class _ProgressScreenState extends State<ProgressScreen> {
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w600,
-                  color: primaryBlue,
+                  color: AppTheme.primaryBlue,
                 ),
               ),
 
               const SizedBox(height: 16),
 
-              // Chart placeholder
-              Container(
-                height: 220,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      spreadRadius: 0,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Calorie Intake',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Expanded(
-                      // Placeholder for chart
-                      child: Center(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: List.generate(7, (index) {
-                            // Random heights for bar chart placeholders
-                            final heights = [
-                              0.6,
-                              0.9,
-                              0.7,
-                              0.8,
-                              0.5,
-                              0.75,
-                              0.85
-                            ];
-                            final days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-
-                            return Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 30,
-                                  height: 120 * heights[index],
-                                  decoration: BoxDecoration(
-                                    color: index == 6
-                                        ? primaryBlue
-                                        : primaryBlue.withOpacity(0.6),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  days[index],
-                                  style: TextStyle(
-                                    fontWeight: index == 6
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                    color:
-                                        index == 6 ? primaryBlue : Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            );
-                          }),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              // Weekly chart widget
+              const WeeklyChartWidget(),
 
               const SizedBox(height: 24),
 
@@ -389,22 +212,22 @@ class _ProgressScreenState extends State<ProgressScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: _buildStatCard(
-                      'Average Daily',
-                      '1,850',
-                      'kcal',
-                      Icons.local_fire_department,
-                      Colors.orange,
+                    child: StatCardWidget(
+                      title: 'Average Daily',
+                      value: '1,850',
+                      unit: 'kcal',
+                      icon: Icons.local_fire_department,
+                      color: Colors.orange,
                     ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
-                    child: _buildStatCard(
-                      'This Week',
-                      '-2.5',
-                      'lbs',
-                      Icons.trending_down,
-                      Colors.green,
+                    child: StatCardWidget(
+                      title: 'This Week',
+                      value: '-2.5',
+                      unit: 'lbs',
+                      icon: Icons.trending_down,
+                      color: Colors.green,
                     ),
                   ),
                 ],
@@ -418,171 +241,20 @@ class _ProgressScreenState extends State<ProgressScreen> {
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w600,
-                  color: primaryBlue,
+                  color: AppTheme.primaryBlue,
                 ),
               ),
 
               const SizedBox(height: 16),
 
-              // Donut chart placeholder
-              Container(
-                height: 220,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      spreadRadius: 0,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    // Donut chart placeholder
-                    Container(
-                      width: 150,
-                      height: 150,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            color: secondaryBeige,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Center(
-                            child: Text(
-                              '1,850',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 20),
-                    // Legend
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildLegendItem('Protein', '25%', Colors.red),
-                          const SizedBox(height: 12),
-                          _buildLegendItem('Carbs', '55%', Colors.green),
-                          const SizedBox(height: 12),
-                          _buildLegendItem('Fat', '20%', Colors.blue),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              // Nutrition chart widget
+              const NutritionChartWidget(),
 
               const SizedBox(height: 80), // Extra space for bottom nav
             ],
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildStatCard(
-      String title, String value, String unit, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            spreadRadius: 0,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                unit,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLegendItem(String label, String percentage, Color color) {
-    return Row(
-      children: [
-        Container(
-          width: 16,
-          height: 16,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 14,
-          ),
-        ),
-        const Spacer(),
-        Text(
-          percentage,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-        ),
-      ],
     );
   }
 }
