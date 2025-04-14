@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import '../widgets/weight_entry_dialog.dart'; // Changed from weight_entry_widget.dart
+import '../widgets/weight_entry_dialog.dart';
 import '../data/repositories/user_repository.dart';
 import '../data/models/weight_entry.dart';
+import '../data/models/user_profile.dart';
 import '../widgets/progress/bmi_widget.dart';
+import '../widgets/progress/body_fat_widget.dart';
 import '../widgets/progress/stat_card_widget.dart';
 import '../widgets/progress/weekly_chart_widget.dart';
 import '../widgets/progress/nutrition_chart_widget.dart';
@@ -20,6 +22,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
   double _currentWeight = 70.0; // Default in kg
   bool _isMetric = true;
   final UserRepository _userRepository = UserRepository();
+  UserProfile? _userProfile; // Store user profile
 
   @override
   void initState() {
@@ -36,6 +39,8 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
     if (mounted) {
       setState(() {
+        _userProfile = userProfile; // Store the user profile
+
         if (userProfile != null) {
           _isMetric = userProfile.isMetric;
         }
@@ -51,7 +56,6 @@ class _ProgressScreenState extends State<ProgressScreen> {
     showDialog(
       context: context,
       builder: (context) => WeightEntryDialog(
-        // Now using WeightEntryDialog instead
         initialWeight: _currentWeight,
         isMetric: _isMetric,
         onWeightSaved: (weight, isMetric) async {
@@ -65,10 +69,12 @@ class _ProgressScreenState extends State<ProgressScreen> {
           await _userRepository.addWeightEntry(weightEntry);
 
           // Update user preference for units if changed
-          final userProfile = await _userRepository.getUserProfile();
-          if (userProfile != null && userProfile.isMetric != isMetric) {
-            final updatedProfile = userProfile.copyWith(isMetric: isMetric);
+          if (_userProfile != null && _userProfile!.isMetric != isMetric) {
+            final updatedProfile = _userProfile!.copyWith(isMetric: isMetric);
             await _userRepository.saveUserProfile(updatedProfile);
+            setState(() {
+              _userProfile = updatedProfile;
+            });
           }
         },
       ),
@@ -78,6 +84,61 @@ class _ProgressScreenState extends State<ProgressScreen> {
   String get _formattedWeight {
     final displayWeight = _isMetric ? _currentWeight : _currentWeight * 2.20462;
     return displayWeight.toStringAsFixed(1) + (_isMetric ? ' kg' : ' lbs');
+  }
+
+  // Calculate body fat percentage using the Deurenberg formula
+  double? _calculateBodyFat(double? bmi, int? age, String? gender) {
+    if (bmi == null) return null;
+
+    // Default age if not available - using 30 as a reasonable middle value
+    final int calculationAge = age ?? 30;
+
+    // Deurenberg formula: Body Fat % = 1.2 × BMI + 0.23 × age - 10.8 × sex - 5.4
+    // Where sex is 1 for males and 0 for females
+    double genderFactor;
+    if (gender == 'Male') {
+      genderFactor = 1.0;
+    } else if (gender == 'Female') {
+      genderFactor = 0.0;
+    } else {
+      // If gender not specified, use an average (0.5)
+      // This is a compromise for unknown gender
+      genderFactor = 0.5;
+    }
+
+    // Calculate using the formula
+    double result =
+        (1.2 * bmi) + (0.23 * calculationAge) - (10.8 * genderFactor) - 5.4;
+
+    // Ensure result is in a reasonable range (minimum 3%, maximum 60%)
+    return result.clamp(3.0, 60.0);
+  }
+
+  // Get classification for body fat percentage - gender specific
+  String _getBodyFatClassification(double bodyFat, String? gender) {
+    if (gender == 'Male') {
+      if (bodyFat < 6) return 'Essential';
+      if (bodyFat < 14) return 'Athletic';
+      if (bodyFat < 18) return 'Fitness';
+      if (bodyFat < 25) return 'Average';
+      if (bodyFat < 30) return 'Above Avg';
+      return 'Obese';
+    } else if (gender == 'Female') {
+      if (bodyFat < 14) return 'Essential';
+      if (bodyFat < 21) return 'Athletic';
+      if (bodyFat < 25) return 'Fitness';
+      if (bodyFat < 32) return 'Average';
+      if (bodyFat < 38) return 'Above Avg';
+      return 'Obese';
+    } else {
+      // Gender-neutral classifications (compromise)
+      if (bodyFat < 10) return 'Essential';
+      if (bodyFat < 18) return 'Athletic';
+      if (bodyFat < 22) return 'Fitness';
+      if (bodyFat < 28) return 'Average';
+      if (bodyFat < 35) return 'Above Avg';
+      return 'Obese';
+    }
   }
 
   @override
@@ -90,7 +151,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Current Weight Card - directly integrated in this file
+              // Current Weight Card
               GestureDetector(
                 onTap: _showWeightEntryDialog,
                 child: Container(
@@ -170,7 +231,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
               const SizedBox(height: 20),
 
-              // BMI Card with enhanced visualization
+              // BMI and Body Fat widgets in a row
               FutureBuilder<double?>(
                 future: _userRepository.calculateBMI(),
                 builder: (context, snapshot) {
@@ -182,9 +243,35 @@ class _ProgressScreenState extends State<ProgressScreen> {
                         _userRepository.getBMIClassification(bmiValue);
                   }
 
-                  return BMIWidget(
-                    bmiValue: bmiValue,
-                    classification: classification,
+                  // Extract profile data needed for body fat calculation
+                  final String? gender = _userProfile?.gender;
+                  final int? age = _userProfile?.age;
+
+                  // Calculate body fat using the improved formula
+                  final bodyFatValue = _calculateBodyFat(bmiValue, age, gender);
+                  String bodyFatClassification = "Not set";
+
+                  if (bodyFatValue != null) {
+                    bodyFatClassification =
+                        _getBodyFatClassification(bodyFatValue, gender);
+                  }
+
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // BMI Widget
+                      BMIWidget(
+                        bmiValue: bmiValue,
+                        classification: classification,
+                      ),
+
+                      // Body Fat Widget - now includes isEstimated flag
+                      BodyFatWidget(
+                        bodyFatPercentage: bodyFatValue,
+                        classification: bodyFatClassification,
+                        isEstimated: true, // Shows "Estimated" label
+                      ),
+                    ],
                   );
                 },
               ),
