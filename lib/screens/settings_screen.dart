@@ -10,6 +10,7 @@ import '../widgets/settings/gender_selection_dialog.dart';
 import '../widgets/settings/activity_level_dialog.dart';
 import '../widgets/settings/feedback_widget.dart';
 import '../widgets/weight_entry_dialog.dart';
+import '../utils/formula.dart'; // Import the Formula utility
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -73,15 +74,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
     }
-  }
-
-  // Format weight based on user's preferred unit system
-  String get _formattedWeight {
-    if (_currentWeight == null) return 'Not set';
-
-    final displayWeight =
-        _isMetric ? _currentWeight! : _currentWeight! * 2.20462;
-    return displayWeight.toStringAsFixed(1) + (_isMetric ? ' kg' : ' lbs');
   }
 
   // Calculate age from date of birth
@@ -367,23 +359,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                     const Divider(height: 1),
 
-                    // Height
+                    // Height - Now using Formula.formatHeight
                     _buildDetailItem(
                       icon: Icons.height,
                       title: 'Height',
-                      value: _userProfile?.height != null
-                          ? _userProfile!.formattedHeight()
-                          : 'Not set',
+                      value: Formula.formatHeight(
+                        height: _userProfile?.height,
+                        isMetric: _isMetric,
+                      ),
                       onTap: _showHeightPickerDialog,
                     ),
 
                     const Divider(height: 1),
 
-                    // Current weight
+                    // Current weight - Already using Formula.formatWeight
                     _buildDetailItem(
                       icon: Icons.monitor_weight,
                       title: 'Current Weight',
-                      value: _formattedWeight,
+                      value: Formula.formatWeight(
+                        weight: _currentWeight,
+                        isMetric: _isMetric,
+                      ),
                       onTap: _showWeightEntryDialog,
                     ),
 
@@ -399,11 +395,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                     const Divider(height: 1),
 
-                    // Activity level
+                    // Activity level - Using Formula.getActivityLevelText
                     _buildDetailItem(
                       icon: Icons.directions_run,
                       title: 'Activity Level',
-                      value: _getActivityLevelText(),
+                      value: Formula.getActivityLevelText(
+                          _userProfile?.activityLevel),
                       onTap: _showActivityLevelDialog,
                     ),
                   ],
@@ -456,6 +453,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           final updatedProfile =
                               _userProfile!.copyWith(isMetric: _isMetric);
                           await _userRepository.saveUserProfile(updatedProfile);
+                          setState(() {
+                            _userProfile = updatedProfile;
+                          });
                         }
                       },
                     ),
@@ -502,18 +502,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
-  }
-
-  String _getActivityLevelText() {
-    if (_userProfile?.activityLevel == null) return 'Not set';
-
-    final level = _userProfile!.activityLevel!;
-
-    if (level < 1.3) return 'Sedentary';
-    if (level < 1.45) return 'Light';
-    if (level < 1.65) return 'Moderate';
-    if (level < 1.8) return 'Active';
-    return 'Very Active';
   }
 
   Widget _buildDetailItem({

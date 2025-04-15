@@ -1,3 +1,5 @@
+import '../../utils/formula.dart';
+
 class UserProfile {
   final String id;
   final String? name;
@@ -44,15 +46,6 @@ class UserProfile {
       activityLevel: activityLevel ?? this.activityLevel,
       birthDate: birthDate ?? this.birthDate,
     );
-  }
-
-  // Calculate BMI if height and latest weight are available
-  double? calculateBMI(double weight) {
-    if (height == null || height! <= 0) return null;
-
-    // BMI = weight(kg) / (height(m))²
-    final heightInMeters = height! / 100;
-    return weight / (heightInMeters * heightInMeters);
   }
 
   // Format height based on user's preferred unit system

@@ -231,6 +231,24 @@ class Formula {
         : '$formattedDifference $units to gain';
   }
 
+  /// Format height with proper units
+  static String formatHeight({
+    required double? height, // in cm
+    required bool isMetric,
+  }) {
+    if (height == null) return 'Not set';
+
+    if (isMetric) {
+      return '$height cm';
+    } else {
+      // Convert cm to feet and inches
+      final totalInches = height / 2.54;
+      final feet = (totalInches / 12).floor();
+      final inches = (totalInches % 12).round();
+      return '$feet\' $inches"';
+    }
+  }
+
   /// Format weight with proper units
   static String formatWeight({
     required double? weight,
