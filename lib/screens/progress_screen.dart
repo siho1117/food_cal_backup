@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../widgets/weight_entry_dialog.dart';
 import '../widgets/target_weight_dialog.dart';
 import '../widgets/target_weight_widget.dart';
-import '../widgets/bmr_calculator_widget.dart'; // Import the BMR widget
+import '../widgets/bmr_calculator_widget.dart';
+import '../widgets/tdee_calculator_widget.dart'; // Import the new TDEE widget
 import '../data/repositories/user_repository.dart';
 import '../data/models/weight_entry.dart';
 import '../data/models/user_profile.dart';
@@ -303,7 +304,15 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
               const SizedBox(height: 20),
 
-              // BMR Calculator Widget - Added the new widget here
+              // TDEE Calculator Widget - Added the new widget here
+              TDEECalculatorWidget(
+                userProfile: _userProfile,
+                currentWeight: _currentWeight,
+              ),
+
+              const SizedBox(height: 20),
+
+              // BMR Calculator Widget
               BMRCalculatorWidget(
                 userProfile: _userProfile,
                 currentWeight: _currentWeight,

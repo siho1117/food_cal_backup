@@ -103,7 +103,7 @@ class UserProfile {
     // Debug print
     print('Loading UserProfile with age: $ageValue');
 
-    return UserProfile(
+    final profile = UserProfile(
       id: map['id'],
       name: map['name'],
       age: ageValue,
@@ -116,5 +116,27 @@ class UserProfile {
           ? DateTime.fromMillisecondsSinceEpoch(map['birthDate'])
           : null,
     );
+
+    // Add debug print after creating the profile
+    profile.debugPrint();
+
+    return profile;
+  }
+
+  // Debug method to print all user profile details
+  void debugPrint() {
+    print("\n===== USER PROFILE DEBUG INFO =====");
+    print("ID: $id");
+    print("Name: $name");
+    print("Age: $age");
+    print("Height: ${height != null ? '$height cm' : 'Not set'}");
+    print("Gender: ${gender ?? 'Not set'}");
+    print("Is Metric: $isMetric");
+    print("Goal Weight: ${goalWeight != null ? '$goalWeight kg' : 'Not set'}");
+    print("Activity Level: ${activityLevel ?? 'Not set'}");
+    print(
+        "Birth Date: ${birthDate != null ? birthDate.toString() : 'Not set'}");
+    print("Complete Map: ${toMap()}");
+    print("===================================\n");
   }
 }
