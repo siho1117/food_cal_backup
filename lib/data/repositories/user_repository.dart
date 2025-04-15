@@ -1,6 +1,7 @@
 import '../models/user_profile.dart';
 import '../models/weight_entry.dart';
 import '../storage/local_storage.dart';
+import '../../utils/formula.dart';
 
 class UserRepository {
   static const String _userProfileKey = 'user_profile';
@@ -114,57 +115,31 @@ class UserRepository {
     }
   }
 
-  // Calculate BMI if height and weight are available
+  // Calculate BMI using Formula utility
   Future<double?> calculateBMI() async {
     final profile = await getUserProfile();
     final weightEntry = await getLatestWeightEntry();
 
-    if (profile == null || weightEntry == null || profile.height == null) {
+    if (profile == null || weightEntry == null) {
       return null;
     }
 
-    return profile.calculateBMI(weightEntry.weight);
+    return Formula.calculateBMI(
+      height: profile.height,
+      weight: weightEntry.weight,
+    );
   }
 
-  // Get BMI classification
+  // Get BMI classification using Formula utility
   String getBMIClassification(double bmi) {
-    if (bmi < 18.5) {
-      return 'Underweight';
-    } else if (bmi >= 18.5 && bmi < 25) {
-      return 'Normal';
-    } else if (bmi >= 25 && bmi < 30) {
-      return 'Overweight';
-    } else {
-      return 'Obese';
-    }
+    return Formula.getBMIClassification(bmi);
   }
 
   // Track weight change over a period
   Future<double?> getWeightChangeSince(DateTime startDate) async {
     final entries = await getWeightEntries();
-
-    if (entries.isEmpty) return null;
-
-    // Sort by timestamp (newest first)
-    entries.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-    // Get latest weight
-    final latestWeight = entries.first.weight;
-
-    // Find the closest entry to the start date
-    WeightEntry? startEntry;
-    for (final entry in entries.reversed) {
-      if (entry.timestamp.isAfter(startDate) ||
-          entry.timestamp.isAtSameMomentAs(startDate)) {
-        startEntry = entry;
-        break;
-      }
-    }
-
-    if (startEntry == null) return null;
-
-    // Calculate change (positive means weight gain, negative means weight loss)
-    return latestWeight - startEntry.weight;
+    return Formula.calculateWeightChange(
+        entries: entries, startDate: startDate);
   }
 
   // Calculate progress percentage toward goal weight
@@ -176,32 +151,10 @@ class UserRepository {
       return 0.0;
     }
 
-    final currentWeight = latestEntry.weight;
-    final targetWeight = profile!.goalWeight!;
-
-    // If target equals current, return 100%
-    if ((targetWeight - currentWeight).abs() < 0.1) {
-      return 1.0;
-    }
-
-    // If losing weight
-    if (currentWeight > targetWeight) {
-      // Assume starting point was 20% higher than target
-      final startWeight = targetWeight * 1.2;
-      final totalToLose = startWeight - targetWeight;
-      final lost = startWeight - currentWeight;
-
-      return (lost / totalToLose).clamp(0.0, 1.0);
-    }
-    // If gaining weight
-    else {
-      // Assume starting point was 20% lower than target
-      final startWeight = targetWeight * 0.8;
-      final totalToGain = targetWeight - startWeight;
-      final gained = currentWeight - startWeight;
-
-      return (gained / totalToGain).clamp(0.0, 1.0);
-    }
+    return Formula.calculateGoalProgress(
+      currentWeight: latestEntry.weight,
+      targetWeight: profile!.goalWeight,
+    );
   }
 
   // Get remaining weight to goal
@@ -213,7 +166,10 @@ class UserRepository {
       return null;
     }
 
-    return latestEntry.weight - profile!.goalWeight!;
+    return Formula.getRemainingWeightToGoal(
+      currentWeight: latestEntry.weight,
+      targetWeight: profile!.goalWeight,
+    );
   }
 
   // Check if this is the first time the user is using the app
@@ -265,4 +221,3 @@ class UserRepository {
     return profileSaved && weightSaved;
   }
 }
-//
