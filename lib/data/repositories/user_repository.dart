@@ -32,6 +32,21 @@ class UserRepository {
     }
   }
 
+  // Update goal weight
+  Future<bool> updateGoalWeight(double goalWeight) async {
+    final profile = await getUserProfile();
+    if (profile == null) return false;
+
+    final updatedProfile = profile.copyWith(goalWeight: goalWeight);
+    return await saveUserProfile(updatedProfile);
+  }
+
+  // Get goal weight
+  Future<double?> getGoalWeight() async {
+    final profile = await getUserProfile();
+    return profile?.goalWeight;
+  }
+
   // Add a new weight entry
   Future<bool> addWeightEntry(WeightEntry entry) async {
     final entries = await getWeightEntries();
@@ -152,6 +167,55 @@ class UserRepository {
     return latestWeight - startEntry.weight;
   }
 
+  // Calculate progress percentage toward goal weight
+  Future<double> calculateGoalProgress() async {
+    final profile = await getUserProfile();
+    final latestEntry = await getLatestWeightEntry();
+
+    if (profile?.goalWeight == null || latestEntry == null) {
+      return 0.0;
+    }
+
+    final currentWeight = latestEntry.weight;
+    final targetWeight = profile!.goalWeight!;
+
+    // If target equals current, return 100%
+    if ((targetWeight - currentWeight).abs() < 0.1) {
+      return 1.0;
+    }
+
+    // If losing weight
+    if (currentWeight > targetWeight) {
+      // Assume starting point was 20% higher than target
+      final startWeight = targetWeight * 1.2;
+      final totalToLose = startWeight - targetWeight;
+      final lost = startWeight - currentWeight;
+
+      return (lost / totalToLose).clamp(0.0, 1.0);
+    }
+    // If gaining weight
+    else {
+      // Assume starting point was 20% lower than target
+      final startWeight = targetWeight * 0.8;
+      final totalToGain = targetWeight - startWeight;
+      final gained = currentWeight - startWeight;
+
+      return (gained / totalToGain).clamp(0.0, 1.0);
+    }
+  }
+
+  // Get remaining weight to goal
+  Future<double?> getRemainingWeightToGoal() async {
+    final profile = await getUserProfile();
+    final latestEntry = await getLatestWeightEntry();
+
+    if (profile?.goalWeight == null || latestEntry == null) {
+      return null;
+    }
+
+    return latestEntry.weight - profile!.goalWeight!;
+  }
+
   // Check if this is the first time the user is using the app
   Future<bool> isFirstTimeUser() async {
     final profile = await getUserProfile();
@@ -166,12 +230,16 @@ class UserRepository {
     required double weight,
     required bool isMetric,
     required String gender,
+    double? goalWeight,
   }) async {
     // If not in metric, convert to metric
     final metricHeight =
         isMetric ? height : height * 2.54; // Convert inches to cm
     final metricWeight =
         isMetric ? weight : weight / 2.20462; // Convert lbs to kg
+    final metricGoalWeight = goalWeight != null
+        ? (isMetric ? goalWeight : goalWeight / 2.20462)
+        : null;
 
     // Create user profile
     final userId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -182,6 +250,7 @@ class UserRepository {
       height: metricHeight, // Always store height in cm
       isMetric: isMetric, // Store user's preferred unit system
       gender: gender,
+      goalWeight: metricGoalWeight, // Store goal weight if provided
     );
 
     // Create weight entry
@@ -196,3 +265,4 @@ class UserRepository {
     return profileSaved && weightSaved;
   }
 }
+//

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../widgets/weight_entry_dialog.dart';
+import '../widgets/target_weight_dialog.dart';
+import '../widgets/target_weight_widget.dart';
+import '../widgets/calorie_calculator_widget.dart';
 import '../data/repositories/user_repository.dart';
 import '../data/models/weight_entry.dart';
 import '../data/models/user_profile.dart';
@@ -20,6 +23,7 @@ class ProgressScreen extends StatefulWidget {
 class _ProgressScreenState extends State<ProgressScreen> {
   // User data
   double _currentWeight = 70.0; // Default in kg
+  double? _targetWeight; // Target weight in kg
   bool _isMetric = true;
   final UserRepository _userRepository = UserRepository();
   UserProfile? _userProfile; // Store user profile
@@ -31,24 +35,29 @@ class _ProgressScreenState extends State<ProgressScreen> {
   }
 
   Future<void> _loadUserData() async {
-    // Load user profile for unit preference
-    final userProfile = await _userRepository.getUserProfile();
+    try {
+      // Load user profile for unit preference
+      final userProfile = await _userRepository.getUserProfile();
 
-    // Load latest weight entry
-    final latestWeight = await _userRepository.getLatestWeightEntry();
+      // Load latest weight entry
+      final latestWeight = await _userRepository.getLatestWeightEntry();
 
-    if (mounted) {
-      setState(() {
-        _userProfile = userProfile; // Store the user profile
+      if (mounted) {
+        setState(() {
+          _userProfile = userProfile; // Store the user profile
 
-        if (userProfile != null) {
-          _isMetric = userProfile.isMetric;
-        }
+          if (userProfile != null) {
+            _isMetric = userProfile.isMetric;
+            _targetWeight = userProfile.goalWeight; // Load target weight
+          }
 
-        if (latestWeight != null) {
-          _currentWeight = latestWeight.weight; // Always in kg
-        }
-      });
+          if (latestWeight != null) {
+            _currentWeight = latestWeight.weight; // Always in kg
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading user data: $e');
     }
   }
 
@@ -79,6 +88,55 @@ class _ProgressScreenState extends State<ProgressScreen> {
         },
       ),
     );
+  }
+
+  // Show target weight dialog
+  void _showTargetWeightDialog() async {
+    await _createUserProfileIfNeeded();
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => TargetWeightDialog(
+        initialTargetWeight: _targetWeight,
+        isMetric: _isMetric,
+        onWeightSaved: (weight, isMetric) async {
+          setState(() {
+            _targetWeight = weight; // Always in metric
+            _isMetric = isMetric;
+          });
+
+          // Update user profile
+          if (_userProfile != null) {
+            final updatedProfile = _userProfile!.copyWith(
+              goalWeight: weight,
+              isMetric: isMetric,
+            );
+            await _userRepository.saveUserProfile(updatedProfile);
+            setState(() {
+              _userProfile = updatedProfile;
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  // Create a new user profile if one doesn't exist
+  Future<void> _createUserProfileIfNeeded() async {
+    if (_userProfile == null) {
+      final userId = DateTime.now().millisecondsSinceEpoch.toString();
+      final newProfile = UserProfile(
+        id: userId,
+        isMetric: _isMetric,
+      );
+
+      await _userRepository.saveUserProfile(newProfile);
+      setState(() {
+        _userProfile = newProfile;
+      });
+    }
   }
 
   String get _formattedWeight {
@@ -141,6 +199,85 @@ class _ProgressScreenState extends State<ProgressScreen> {
     }
   }
 
+  // Current weight card widget
+  Widget _buildCurrentWeightCard() {
+    return GestureDetector(
+      onTap: _showWeightEntryDialog,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              spreadRadius: 0,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Icon
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryBlue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.monitor_weight,
+                color: AppTheme.primaryBlue,
+                size: 22,
+              ),
+            ),
+
+            const SizedBox(width: 16),
+
+            // Text
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Current Weight',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formattedWeight,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+
+            const Spacer(),
+
+            // Edit button
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryBlue.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.edit,
+                color: AppTheme.primaryBlue,
+                size: 18,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -152,80 +289,26 @@ class _ProgressScreenState extends State<ProgressScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Current Weight Card
-              GestureDetector(
-                onTap: _showWeightEntryDialog,
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        spreadRadius: 0,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      // Icon
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryBlue.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.monitor_weight,
-                          color: AppTheme.primaryBlue,
-                          size: 22,
-                        ),
-                      ),
+              _buildCurrentWeightCard(),
 
-                      const SizedBox(width: 16),
+              const SizedBox(height: 20),
 
-                      // Text
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Current Weight',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _formattedWeight,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
+              // Target Weight Widget
+              TargetWeightWidget(
+                targetWeight: _targetWeight,
+                currentWeight: _currentWeight,
+                isMetric: _isMetric,
+                onTap: _showTargetWeightDialog,
+              ),
 
-                      const Spacer(),
+              const SizedBox(height: 20),
 
-                      // Edit button
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryBlue.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.edit,
-                          color: AppTheme.primaryBlue,
-                          size: 18,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              // BMR and TDEE Calculator Widget
+              CalorieCalculatorWidget(
+                userProfile: _userProfile,
+                currentWeight: _currentWeight,
+                onTap:
+                    () {}, // No action needed as we're just displaying values
               ),
 
               const SizedBox(height: 20),
@@ -248,7 +331,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
                     final String? gender = _userProfile?.gender;
                     final int? age = _userProfile?.age;
 
-                    // Calculate body fat using the improved formula
+                    // Calculate body fat using the formula
                     final bodyFatValue =
                         _calculateBodyFat(bmiValue, age, gender);
                     String bodyFatClassification = "";
