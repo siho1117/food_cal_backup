@@ -16,13 +16,13 @@ class BMIWidget extends StatelessWidget {
     if (bmiValue == null) return Colors.grey;
 
     if (bmiValue! < 18.5) {
-      return const Color(0xFF3F8EFC); // Blue for Underweight
+      return const Color.fromARGB(255, 112, 150, 136); // Blue for Underweight
     } else if (bmiValue! < 25) {
-      return AppTheme.primaryBlue; // Green for Normal
+      return const Color.fromARGB(255, 55, 115, 109); // Green for Normal
     } else if (bmiValue! < 30) {
-      return const Color(0xFFFF9A3D); // Orange for Overweight
+      return const Color.fromARGB(255, 193, 77, 59); // Orange for Overweight
     } else {
-      return const Color(0xFFFF5A5A); // Red for Obese
+      return const Color.fromARGB(255, 204, 34, 34); // Red for Obese
     }
   }
 
