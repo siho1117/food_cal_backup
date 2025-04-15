@@ -109,7 +109,11 @@ class ExerciseRepository {
   Future<int> getTotalCaloriesBurnedInRange(
       DateTime startDate, DateTime endDate) async {
     final logs = await getExerciseLogsInRange(startDate, endDate);
-    return logs.fold(0, (sum, log) => sum + log.caloriesBurned);
+    int total = 0;
+    for (var log in logs) {
+      total += log.caloriesBurned;
+    }
+    return total;
   }
 
   // Internal method to save exercise logs
