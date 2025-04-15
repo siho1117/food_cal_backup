@@ -3,7 +3,7 @@ import 'package:flutter/cupertino.dart';
 
 class DateOfBirthPickerDialog extends StatefulWidget {
   final DateTime? initialDate;
-  final Function(DateTime) onDateSelected;
+  final Function(DateTime selectedDate, int calculatedAge) onDateSelected;
 
   const DateOfBirthPickerDialog({
     Key? key,
@@ -27,7 +27,8 @@ class _DateOfBirthPickerDialogState extends State<DateOfBirthPickerDialog> {
         widget.initialDate ?? DateTime(now.year - 30, now.month, now.day);
   }
 
-  String _calculateAge(DateTime dob) {
+  // Calculate age as integer value
+  int calculateAge(DateTime dob) {
     final now = DateTime.now();
     int age = now.year - dob.year;
 
@@ -37,7 +38,12 @@ class _DateOfBirthPickerDialogState extends State<DateOfBirthPickerDialog> {
       age--;
     }
 
-    return '$age years';
+    return age;
+  }
+
+  // Format age for display
+  String getFormattedAge(DateTime dob) {
+    return '${calculateAge(dob)} years';
   }
 
   String _formatDate(DateTime date) {
@@ -72,7 +78,7 @@ class _DateOfBirthPickerDialogState extends State<DateOfBirthPickerDialog> {
 
               // Age display
               Text(
-                'Age: ${_calculateAge(_selectedDate)}',
+                'Age: ${getFormattedAge(_selectedDate)}',
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -218,7 +224,9 @@ class _DateOfBirthPickerDialogState extends State<DateOfBirthPickerDialog> {
                   // Save button
                   ElevatedButton(
                     onPressed: () {
-                      widget.onDateSelected(_selectedDate);
+                      // Pass both selected date and calculated age
+                      widget.onDateSelected(
+                          _selectedDate, calculateAge(_selectedDate));
                       Navigator.of(context).pop();
                     },
                     style: ElevatedButton.styleFrom(

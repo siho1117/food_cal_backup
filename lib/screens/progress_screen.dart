@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/weight_entry_dialog.dart';
 import '../widgets/target_weight_dialog.dart';
 import '../widgets/target_weight_widget.dart';
-import '../widgets/calorie_calculator_widget.dart';
+import '../widgets/bmr_calculator_widget.dart'; // Import the BMR widget
 import '../data/repositories/user_repository.dart';
 import '../data/models/weight_entry.dart';
 import '../data/models/user_profile.dart';
@@ -303,12 +303,10 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
               const SizedBox(height: 20),
 
-              // BMR and TDEE Calculator Widget
-              CalorieCalculatorWidget(
+              // BMR Calculator Widget - Added the new widget here
+              BMRCalculatorWidget(
                 userProfile: _userProfile,
                 currentWeight: _currentWeight,
-                onTap:
-                    () {}, // No action needed as we're just displaying values
               ),
 
               const SizedBox(height: 20),

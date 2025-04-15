@@ -158,10 +158,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => DateOfBirthPickerDialog(
         initialDate: _userProfile?.birthDate,
-        onDateSelected: (selectedDate) async {
+        onDateSelected: (selectedDate, calculatedAge) async {
           if (_userProfile != null) {
-            final updatedProfile =
-                _userProfile!.copyWith(birthDate: selectedDate);
+            // Update profile with both birthDate and calculated age
+            final updatedProfile = _userProfile!.copyWith(
+              birthDate: selectedDate,
+              age: calculatedAge,
+            );
+
+            print('Saving age: $calculatedAge'); // Debug print
             await _userRepository.saveUserProfile(updatedProfile);
 
             setState(() {

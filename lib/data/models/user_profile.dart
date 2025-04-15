@@ -72,6 +72,7 @@ class UserProfile {
 
   // Convert to map for storage
   Map<String, dynamic> toMap() {
+    print('Saving UserProfile with age: $age'); // Debug print
     return {
       'id': id,
       'name': name,
@@ -87,10 +88,25 @@ class UserProfile {
 
   // Create from map for retrieval
   factory UserProfile.fromMap(Map<String, dynamic> map) {
+    // Ensure proper type conversion for age
+    int? ageValue;
+    if (map['age'] != null) {
+      if (map['age'] is int) {
+        ageValue = map['age'] as int;
+      } else if (map['age'] is double) {
+        ageValue = (map['age'] as double).toInt();
+      } else if (map['age'] is String) {
+        ageValue = int.tryParse(map['age'] as String);
+      }
+    }
+
+    // Debug print
+    print('Loading UserProfile with age: $ageValue');
+
     return UserProfile(
       id: map['id'],
       name: map['name'],
-      age: map['age'],
+      age: ageValue,
       height: map['height'],
       isMetric: map['isMetric'] ?? true,
       gender: map['gender'],
