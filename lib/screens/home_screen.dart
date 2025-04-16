@@ -1,5 +1,7 @@
+// lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
+import '../widgets/home/target_calories_widget.dart'; // Import the new widget
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -135,6 +137,17 @@ class HomeScreen extends StatelessWidget {
                         ),
                       ],
                     ),
+                  ],
+                ),
+              ),
+
+              // Target Calories Widget (NEW)
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    TargetCaloriesWidget(),
                   ],
                 ),
               ),

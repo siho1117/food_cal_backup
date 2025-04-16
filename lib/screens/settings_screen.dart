@@ -9,6 +9,7 @@ import '../widgets/settings/height_picker_dialog.dart';
 import '../widgets/settings/gender_selection_dialog.dart';
 import '../widgets/settings/activity_level_dialog.dart';
 import '../widgets/settings/feedback_widget.dart';
+import '../widgets/settings/monthly_weight_goal_dialog.dart'; // New import
 import '../widgets/weight_entry_dialog.dart';
 import '../utils/formula.dart'; // Import the Formula utility
 
@@ -243,6 +244,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // Show monthly weight goal dialog
+  void _showMonthlyWeightGoalDialog() async {
+    await _createUserProfileIfNeeded();
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => MonthlyWeightGoalDialog(
+        currentMonthlyGoal: _userProfile?.monthlyWeightGoal,
+        isMetric: _isMetric,
+        onGoalSaved: (monthlyGoal) async {
+          if (_userProfile != null) {
+            final updatedProfile = _userProfile!.copyWith(
+              monthlyWeightGoal: monthlyGoal,
+            );
+            await _userRepository.saveUserProfile(updatedProfile);
+
+            setState(() {
+              _userProfile = updatedProfile;
+            });
+          }
+        },
+      ),
+    );
+  }
+
   // Show avatar picker
   void _showAvatarPicker() async {
     await _createUserProfileIfNeeded();
@@ -458,6 +486,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           });
                         }
                       },
+                    ),
+
+                    const Divider(height: 1),
+
+                    // Monthly weight goal
+                    _buildDetailItem(
+                      icon: Icons.speed,
+                      title: 'Monthly Weight Goal',
+                      value: _userProfile?.monthlyWeightGoal != null
+                          ? '${Formula.formatMonthlyWeightGoal(
+                              goal: _userProfile!.monthlyWeightGoal,
+                              isMetric: _isMetric,
+                            )}'
+                          : 'Not set',
+                      onTap: _showMonthlyWeightGoalDialog,
                     ),
                   ],
                 ),

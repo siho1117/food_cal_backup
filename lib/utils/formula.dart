@@ -1,3 +1,4 @@
+// lib/utils/formula.dart
 import '../data/models/user_profile.dart';
 import '../data/models/weight_entry.dart';
 
@@ -261,6 +262,21 @@ class Formula {
     return '${displayWeight.toStringAsFixed(decimalPlaces)} ${isMetric ? 'kg' : 'lbs'}';
   }
 
+  /// Format monthly weight goal with proper units
+  static String formatMonthlyWeightGoal({
+    required double? goal,
+    required bool isMetric,
+  }) {
+    if (goal == null) return 'Not set';
+
+    final isGain = goal > 0;
+    final absGoal = goal.abs();
+    final displayGoal = isMetric ? absGoal : absGoal * 2.20462;
+    final units = isMetric ? 'kg' : 'lbs';
+
+    return '${isGain ? '+' : '-'}${displayGoal.toStringAsFixed(1)} $units/month';
+  }
+
   /// Calculate weight change over a time period
   static double? calculateWeightChange({
     required List<WeightEntry> entries,
@@ -377,5 +393,136 @@ class Formula {
     }
 
     return missingData;
+  }
+
+  /// Calculate recommended daily calorie intake based on monthly weight goal
+  static int calculateRecommendedCalorieIntake({
+    required double? bmr,
+    required double? activityLevel,
+    required double? monthlyWeightGoal, // kg/month, negative for loss
+  }) {
+    if (bmr == null || activityLevel == null || monthlyWeightGoal == null) {
+      return 0;
+    }
+
+    // Calculate maintenance calories (TDEE)
+    final maintenanceCalories = bmr * activityLevel;
+
+    // Convert monthly goal to daily (divide by ~30 days)
+    final dailyWeightChangeKg = monthlyWeightGoal / 30;
+
+    // Each kg of body fat is roughly 7700 calories
+    final calorieAdjustment = dailyWeightChangeKg * 7700;
+
+    // Add/subtract from maintenance based on gain/loss
+    return (maintenanceCalories + calorieAdjustment).round();
+  }
+
+  /// Get calorie goal description based on whether exceeding or under target
+  static String getCalorieGoalDescription(double? monthlyWeightGoal) {
+    if (monthlyWeightGoal == null) {
+      return "to maintain weight";
+    }
+
+    if (monthlyWeightGoal < -0.1) {
+      return "to lose weight";
+    } else if (monthlyWeightGoal > 0.1) {
+      return "to gain weight";
+    } else {
+      return "to maintain weight";
+    }
+  }
+
+  /// Calculate personalized macronutrient ratios based on user profile and goals
+  static Map<String, dynamic> calculateMacronutrientRatio({
+    required double? monthlyWeightGoal,
+    required double? activityLevel,
+    required String? gender,
+    required int? age,
+    required double? currentWeight,
+  }) {
+    // Default macros (moderate balanced approach)
+    int proteinPercentage = 30;
+    int carbsPercentage = 45;
+    int fatPercentage = 25;
+
+    // If we don't have enough information, return default values
+    if (monthlyWeightGoal == null ||
+        activityLevel == null ||
+        gender == null ||
+        age == null ||
+        currentWeight == null) {
+      return {
+        'protein_percentage': proteinPercentage,
+        'carbs_percentage': carbsPercentage,
+        'fat_percentage': fatPercentage,
+      };
+    }
+
+    // 1. Adjust based on weight goal (gain/loss)
+    if (monthlyWeightGoal < -0.1) {
+      // Weight loss - increase protein, reduce carbs
+      proteinPercentage += 5;
+      carbsPercentage -= 5;
+    } else if (monthlyWeightGoal > 0.1) {
+      // Weight gain - increase carbs for energy surplus
+      carbsPercentage += 5;
+      fatPercentage -= 5;
+    }
+
+    // 2. Adjust based on activity level
+    if (activityLevel < 1.4) {
+      // Sedentary - lower carbs
+      carbsPercentage -= 5;
+      fatPercentage += 5;
+    } else if (activityLevel > 1.7) {
+      // Very active - higher carbs for energy
+      carbsPercentage += 5;
+      fatPercentage -= 5;
+    }
+
+    // 3. Adjust based on age
+    bool isOlder = age > 50;
+    if (isOlder) {
+      // Older adults need more protein for muscle preservation
+      proteinPercentage += 5;
+      carbsPercentage -= 5;
+    }
+
+    // 4. Make final adjustments to ensure percentages sum to 100%
+    int total = proteinPercentage + carbsPercentage + fatPercentage;
+    if (total != 100) {
+      // Adjust carbs to make total 100%
+      carbsPercentage += (100 - total);
+    }
+
+    // 5. Calculate protein based on body weight (between 1.6-2.2g per kg)
+    double proteinPerKg;
+    if (monthlyWeightGoal < -0.1) {
+      // Higher protein for weight loss (2.0-2.2g/kg)
+      proteinPerKg = 2.0;
+    } else if (monthlyWeightGoal > 0.1) {
+      // Moderate protein for weight gain (1.6-1.8g/kg)
+      proteinPerKg = 1.6;
+    } else {
+      // Balanced protein for maintenance (1.8g/kg)
+      proteinPerKg = 1.8;
+    }
+
+    // Adjust protein per kg based on activity level
+    if (activityLevel > 1.7) {
+      proteinPerKg += 0.2; // More active = more protein
+    }
+
+    // Calculate daily protein in grams
+    int proteinGrams = (currentWeight * proteinPerKg).round();
+
+    return {
+      'protein_percentage': proteinPercentage,
+      'carbs_percentage': carbsPercentage,
+      'fat_percentage': fatPercentage,
+      'protein_per_kg': proteinPerKg,
+      'recommended_protein_grams': proteinGrams,
+    };
   }
 }

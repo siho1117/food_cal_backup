@@ -1,3 +1,4 @@
+// lib/data/models/user_profile.dart
 import '../../utils/formula.dart';
 
 class UserProfile {
@@ -10,6 +11,8 @@ class UserProfile {
   final double? goalWeight; // Stored in kg
   final double? activityLevel; // 1.2 (sedentary) - 1.9 (very active)
   final DateTime? birthDate; // New field for date of birth
+  final double?
+      monthlyWeightGoal; // New field for monthly weight change goal in kg
 
   UserProfile({
     required this.id,
@@ -21,6 +24,7 @@ class UserProfile {
     this.goalWeight,
     this.activityLevel,
     this.birthDate,
+    this.monthlyWeightGoal,
   });
 
   // Copy constructor for updating user profile
@@ -34,6 +38,7 @@ class UserProfile {
     double? goalWeight,
     double? activityLevel,
     DateTime? birthDate,
+    double? monthlyWeightGoal,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -45,6 +50,7 @@ class UserProfile {
       goalWeight: goalWeight ?? this.goalWeight,
       activityLevel: activityLevel ?? this.activityLevel,
       birthDate: birthDate ?? this.birthDate,
+      monthlyWeightGoal: monthlyWeightGoal ?? this.monthlyWeightGoal,
     );
   }
 
@@ -76,6 +82,7 @@ class UserProfile {
       'goalWeight': goalWeight,
       'activityLevel': activityLevel,
       'birthDate': birthDate?.millisecondsSinceEpoch,
+      'monthlyWeightGoal': monthlyWeightGoal,
     };
   }
 
@@ -108,6 +115,7 @@ class UserProfile {
       birthDate: map['birthDate'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['birthDate'])
           : null,
+      monthlyWeightGoal: map['monthlyWeightGoal'],
     );
 
     // Add debug print after creating the profile
@@ -126,6 +134,8 @@ class UserProfile {
     print("Gender: ${gender ?? 'Not set'}");
     print("Is Metric: $isMetric");
     print("Goal Weight: ${goalWeight != null ? '$goalWeight kg' : 'Not set'}");
+    print(
+        "Monthly Weight Goal: ${monthlyWeightGoal != null ? '$monthlyWeightGoal kg' : 'Not set'}");
     print("Activity Level: ${activityLevel ?? 'Not set'}");
     print(
         "Birth Date: ${birthDate != null ? birthDate.toString() : 'Not set'}");
