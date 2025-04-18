@@ -1,5 +1,8 @@
+// lib/data/storage/local_storage.dart
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 /// A class to handle local storage operations using SharedPreferences
 ///
@@ -11,6 +14,11 @@ class LocalStorage {
   static final LocalStorage _instance = LocalStorage._internal();
   factory LocalStorage() => _instance;
   LocalStorage._internal();
+
+  // Get temporary directory for file storage
+  Future<Directory> getTemporaryDirectory() async {
+    return await getApplicationDocumentsDirectory();
+  }
 
   // Get string value by key
   Future<String?> getString(String key) async {
