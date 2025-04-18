@@ -78,6 +78,13 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
   }
 
   void _onItemTapped(int index) {
+    // If we're already on the camera screen (index 2) and user taps camera button again,
+    // trigger the capture method
+    if (_currentIndex == 2 && index == 2) {
+      _onCameraCapture();
+      return;
+    }
+
     // Reset animation when tab changes
     _animationController.reset();
     _animationController.forward();
@@ -127,7 +134,8 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
       bottomNavigationBar: CustomBottomNav(
         currentIndex: _currentIndex,
         onTap: _onItemTapped,
-        onCameraCapture: _onCameraCapture,
+        onCameraCapture:
+            null, // Remove this callback as we're handling it in onItemTapped
       ),
     );
   }
