@@ -414,8 +414,21 @@ class Formula {
     // Each kg of body fat is roughly 7700 calories
     final calorieAdjustment = dailyWeightChangeKg * 7700;
 
-    // Add/subtract from maintenance based on gain/loss
-    return (maintenanceCalories + calorieAdjustment).round();
+    // Calculate target calories by adding/subtracting from maintenance
+    int targetCalories = (maintenanceCalories + calorieAdjustment).round();
+
+    // SAFETY CHECK: For weight loss, ensure target calories don't go below 90% of BMR
+    // This is important for maintaining health during weight loss
+    if (monthlyWeightGoal < 0) {
+      final minimumSafeCalories = (bmr * 0.9).round();
+      if (targetCalories < minimumSafeCalories) {
+        targetCalories = minimumSafeCalories;
+        // Note: In a real app, you might want to notify the user that their
+        // goal has been adjusted for safety reasons
+      }
+    }
+
+    return targetCalories;
   }
 
   /// Get calorie goal description based on whether exceeding or under target
@@ -523,6 +536,139 @@ class Formula {
       'fat_percentage': fatPercentage,
       'protein_per_kg': proteinPerKg,
       'recommended_protein_grams': proteinGrams,
+    };
+  }
+
+  /// Calculate recommended daily exercise calorie burn based on weight goals
+  static Map<String, dynamic> calculateRecommendedExerciseBurn({
+    required double? monthlyWeightGoal, // kg/month, negative for loss
+    required double? bmr,
+    required double? activityLevel,
+    required int? age,
+    required String? gender,
+    required double? currentWeight,
+  }) {
+    // Default return if we don't have sufficient data
+    if (monthlyWeightGoal == null ||
+        bmr == null ||
+        activityLevel == null ||
+        age == null ||
+        currentWeight == null) {
+      return {
+        'daily_burn': 0,
+        'weekly_burn': 0,
+        'light_minutes': 0,
+        'moderate_minutes': 0,
+        'intense_minutes': 0,
+        'recommendation_type': 'default',
+        'safety_adjusted': false,
+      };
+    }
+
+    // Calculate TDEE (Total Daily Energy Expenditure)
+    final tdee = bmr * activityLevel;
+
+    // Calculate daily calorie deficit/surplus needed based on monthly goal
+    // 1 kg of body fat = approximately 7700 calories
+    final monthlyCalorieChange = monthlyWeightGoal * 7700;
+    final dailyCalorieChange = monthlyCalorieChange / 30;
+
+    // Target intake already accounts for the goal, so calculate additional exercise
+    int dailyBurn;
+    String recommendationType;
+    bool safetyAdjusted = false;
+
+    if (monthlyWeightGoal < -0.1) {
+      // Weight loss goal
+      // For weight loss, we want to recommend exercise to boost the deficit
+      // We recommend that about 20-30% of the deficit comes from exercise
+      // The rest should come from dietary changes
+      dailyBurn = (dailyCalorieChange.abs() * 0.25).round();
+      recommendationType = 'loss';
+
+      // Check if calorie intake has been safety adjusted (capped at 90% of BMR)
+      // Calculate what the theoretical calorie target would have been without safety adjustment
+      final theoreticalTargetCalories = (tdee + dailyCalorieChange).round();
+      final minimumSafeCalories = (bmr * 0.9).round();
+
+      if (theoreticalTargetCalories < minimumSafeCalories) {
+        // Safety adjustment was applied to calorie intake
+        safetyAdjusted = true;
+
+        // Calculate how many calories were added due to safety adjustment
+        final calorieAdjustment =
+            minimumSafeCalories - theoreticalTargetCalories;
+
+        // Add this adjustment to the daily burn to maintain the same deficit
+        // Plus an additional 20% to encourage good exercise habits
+        final additionalBurn = (calorieAdjustment * 1.2).round();
+        dailyBurn += additionalBurn;
+      }
+    } else if (monthlyWeightGoal > 0.1) {
+      // Weight gain goal
+      // For weight gain, we still recommend exercise for health
+      // but at a lower level to not counteract the calorie surplus
+      dailyBurn = (200).round(); // Base exercise for fitness
+      recommendationType = 'gain';
+    } else {
+      // Maintenance goal
+      // Recommend a moderate amount of exercise for general fitness
+      dailyBurn = (300).round();
+      recommendationType = 'maintain';
+    }
+
+    // Calculate weekly total
+    final weeklyBurn = dailyBurn * 7;
+
+    // Adjust for age and gender
+    double ageAdjustmentFactor = 1.0;
+    if (age > 50) {
+      ageAdjustmentFactor = 0.85; // Lower intensity for older adults
+    } else if (age < 25) {
+      ageAdjustmentFactor = 1.15; // Higher intensity for younger adults
+    }
+
+    // Gender-based adjustment (if relevant)
+    double genderAdjustmentFactor = 1.0;
+    if (gender == 'Male') {
+      genderAdjustmentFactor =
+          1.1; // Slightly higher for males due to muscle mass
+    } else if (gender == 'Female') {
+      genderAdjustmentFactor = 0.9; // Slightly lower for females
+    }
+
+    // Calculate exercise minutes at different intensities
+    // Light: ~5 cal/min, Moderate: ~10 cal/min, Intense: ~15 cal/min
+    // These are approximations and vary based on weight, fitness level, etc.
+    final baseCaloriesPerMinute =
+        (currentWeight / 70) * 10; // Baseline for 70kg person
+
+    final lightCaloriesPerMinute = baseCaloriesPerMinute *
+        0.5 *
+        ageAdjustmentFactor *
+        genderAdjustmentFactor;
+    final moderateCaloriesPerMinute = baseCaloriesPerMinute *
+        1.0 *
+        ageAdjustmentFactor *
+        genderAdjustmentFactor;
+    final intenseCaloriesPerMinute = baseCaloriesPerMinute *
+        1.5 *
+        ageAdjustmentFactor *
+        genderAdjustmentFactor;
+
+    // Calculate minutes needed at each intensity
+    final lightMinutes = (dailyBurn / lightCaloriesPerMinute).round();
+    final moderateMinutes = (dailyBurn / moderateCaloriesPerMinute).round();
+    final intenseMinutes = (dailyBurn / intenseCaloriesPerMinute).round();
+
+    return {
+      'daily_burn': dailyBurn,
+      'weekly_burn': weeklyBurn,
+      'light_minutes': lightMinutes,
+      'moderate_minutes': moderateMinutes,
+      'intense_minutes': intenseMinutes,
+      'recommendation_type': recommendationType,
+      'safety_adjusted': safetyAdjusted,
     };
   }
 }

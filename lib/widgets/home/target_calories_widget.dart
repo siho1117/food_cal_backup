@@ -17,8 +17,11 @@ class _TargetCaloriesWidgetState extends State<TargetCaloriesWidget> {
   bool _isLoading = true;
   UserProfile? _userProfile;
   double? _currentWeight;
+  double? _bmr; // Store BMR for safety check display
   int _targetCalories = 0;
   String _goalDescription = "";
+  bool _safetyAdjusted =
+      false; // Flag to track if target was adjusted for safety
   Map<String, dynamic> _macros = {
     'protein_percentage': 30,
     'carbs_percentage': 45,
@@ -53,7 +56,28 @@ class _TargetCaloriesWidgetState extends State<TargetCaloriesWidget> {
         gender: userProfile?.gender,
       );
 
-      // Calculate target calories
+      // Store BMR for safety check display
+      _bmr = bmr;
+
+      // Calculate if we need a safety adjustment for weight loss
+      bool needsSafetyAdjustment = false;
+      if (userProfile?.monthlyWeightGoal != null &&
+          userProfile!.monthlyWeightGoal! < 0 &&
+          bmr != null &&
+          userProfile?.activityLevel != null) {
+        // Calculate the theoretical target without safety check
+        final maintenanceCalories = bmr * userProfile!.activityLevel!;
+        final dailyWeightChangeKg = userProfile!.monthlyWeightGoal! / 30;
+        final calorieAdjustment = dailyWeightChangeKg * 7700;
+        final theoreticalTarget =
+            (maintenanceCalories + calorieAdjustment).round();
+
+        // Check if it would be below 90% of BMR
+        final minimumSafeCalories = (bmr * 0.9).round();
+        needsSafetyAdjustment = theoreticalTarget < minimumSafeCalories;
+      }
+
+      // Calculate target calories using the improved formula
       final targetCalories = Formula.calculateRecommendedCalorieIntake(
         bmr: bmr,
         activityLevel: userProfile?.activityLevel,
@@ -81,6 +105,7 @@ class _TargetCaloriesWidgetState extends State<TargetCaloriesWidget> {
           _targetCalories = targetCalories;
           _goalDescription = goalDescription;
           _macros = macros;
+          _safetyAdjusted = needsSafetyAdjustment;
           _isLoading = false;
         });
       }
@@ -204,6 +229,40 @@ class _TargetCaloriesWidgetState extends State<TargetCaloriesWidget> {
                 ],
               ),
             ),
+
+            // Show safety adjustment notice if applied
+            if (_safetyAdjusted && _bmr != null)
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.amber.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.health_and_safety,
+                      color: Colors.amber[700],
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Your target has been adjusted to stay above ${(_bmr! * 0.9).round()} calories for health safety.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.amber[900],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             const SizedBox(height: 16),
 
