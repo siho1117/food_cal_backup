@@ -4,6 +4,7 @@ import '../../config/theme.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/models/user_profile.dart';
 import '../../utils/formula.dart';
+import '../../screens/settings_screen.dart'; // Added this import
 
 class TargetCaloriesWidget extends StatefulWidget {
   const TargetCaloriesWidget({Key? key}) : super(key: key);
@@ -366,9 +367,12 @@ class _TargetCaloriesWidgetState extends State<TargetCaloriesWidget> {
                   const SizedBox(height: 12),
                   ElevatedButton(
                     onPressed: () {
-                      // Navigate to settings screen
-                      // Note: You may need to adjust this navigation based on your app's routing setup
-                      Navigator.pushNamed(context, '/settings');
+                      // Navigate to settings screen using push instead of pushNamed
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const SettingsScreen()),
+                      );
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryBlue,

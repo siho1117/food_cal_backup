@@ -23,6 +23,14 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: const SplashScreen(),
+      // Define routes for navigation
+      routes: {
+        '/home': (context) => const MainApp(),
+        '/settings': (context) => const SettingsScreen(),
+        '/progress': (context) => const ProgressScreen(),
+        '/exercise': (context) => const ExerciseScreen(),
+        '/camera': (context) => const CameraScreen(),
+      },
     );
   }
 }
@@ -37,14 +45,13 @@ class MainApp extends StatefulWidget {
 class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
   late AnimationController _animationController;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const ProgressScreen(),
-    const CameraScreen(),
-    const ExerciseScreen(),
-    const SettingsScreen(),
-  ];
+  // Camera controller reference to call camera capture
+  final GlobalKey<CameraScreenState> _cameraScreenKey =
+      GlobalKey<CameraScreenState>();
+
+  late List<Widget> _screens;
 
   @override
   void initState() {
@@ -53,6 +60,15 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 500),
     );
+
+    // Initialize screens with the camera screen key
+    _screens = [
+      const HomeScreen(),
+      const ProgressScreen(),
+      CameraScreen(key: _cameraScreenKey),
+      const ExerciseScreen(),
+      const SettingsScreen(),
+    ];
   }
 
   @override
@@ -71,6 +87,11 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
     });
   }
 
+  void _onCameraCapture() {
+    // Call the capture method on the camera screen
+    _cameraScreenKey.currentState?.capturePhoto();
+  }
+
   void _navigateToSettings() {
     setState(() {
       _currentIndex = 4; // Index for settings screen
@@ -80,6 +101,7 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       appBar: _currentIndex == 2
           ? null // No app bar for camera screen
           : CustomAppBar(
@@ -105,6 +127,7 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
       bottomNavigationBar: CustomBottomNav(
         currentIndex: _currentIndex,
         onTap: _onItemTapped,
+        onCameraCapture: _onCameraCapture,
       ),
     );
   }

@@ -5,11 +5,13 @@ import '../config/theme.dart';
 class CustomBottomNav extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
+  final Function()? onCameraCapture;
 
   const CustomBottomNav({
     Key? key,
     required this.currentIndex,
     required this.onTap,
+    this.onCameraCapture,
   }) : super(key: key);
 
   @override
@@ -18,6 +20,9 @@ class CustomBottomNav extends StatelessWidget {
     final navBarColor = AppTheme.primaryBlue; // Very dark beige
     final primaryBlue = const Color.fromARGB(
         255, 255, 147, 46); // App's primary blue for selected button
+
+    // Check if we're on the camera screen
+    final isCameraScreen = currentIndex == 2;
 
     return CurvedNavigationBar(
       index: currentIndex,
@@ -30,11 +35,19 @@ class CustomBottomNav extends StatelessWidget {
       items: [
         _buildNavItem(Icons.home_rounded, 'Home', 0),
         _buildNavItem(Icons.bar_chart_rounded, 'Progress', 1),
-        _buildNavItem(Icons.camera_alt_rounded, 'Camera', 2),
+        // Custom camera button that changes based on screen
+        _buildCameraNavItem(isCameraScreen),
         _buildNavItem(Icons.fitness_center_rounded, 'Exercise', 3),
         _buildNavItem(Icons.settings_rounded, 'Settings', 4),
       ],
-      onTap: onTap,
+      onTap: (index) {
+        // Special handling for camera button when on camera screen
+        if (index == 2 && isCameraScreen && onCameraCapture != null) {
+          onCameraCapture!();
+        } else {
+          onTap(index);
+        }
+      },
     );
   }
 
@@ -67,5 +80,52 @@ class CustomBottomNav extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Widget _buildCameraNavItem(bool isCameraScreen) {
+    // If we're on the camera screen, show a camera shutter button
+    // Otherwise, show the normal camera icon
+    if (isCameraScreen) {
+      return Padding(
+        padding: const EdgeInsets.all(6),
+        child: Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Colors.white,
+              width: 3,
+            ),
+          ),
+          child: const Icon(
+            Icons.camera,
+            size: 32,
+            color: Colors.white,
+          ),
+        ),
+      );
+    } else {
+      // Regular camera nav item
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(10, 16, 10, 5),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Icon(
+              Icons.camera_alt_rounded,
+              size: 24,
+              color: Colors.white,
+            ),
+            Text(
+              'Camera',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
   }
 }
