@@ -3,17 +3,17 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart'; // Add image compression library
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart'; // Re-add dotenv for environment variables
 
 /// Service to interact with the Food API for food recognition
 class FoodApiService {
-  // Use the OpenAI API key
-  final String apiKey =
-      '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';
+  // Get API key from .env file
+  String get apiKey => dotenv.env['OPENAI_API_KEY'] ?? '';
 
   // Model names
-  final String visionModel = 'gpt-4.1-mini'; // Using gpt-4.1-nano for vision
-  final String textModel = 'gpt-4.1-nano'; // Using gpt-4.1-nano for text
+  final String visionModel = 'gpt-4.1-mini'; // Vision model
+  final String textModel = 'gpt-4.1-nano'; // Text model
 
   // Base URL for OpenAI API calls
   final String baseUrl = 'api.openai.com';
@@ -38,6 +38,12 @@ class FoodApiService {
     // Check if we've exceeded our daily quota
     if (await isDailyQuotaExceeded()) {
       throw Exception('Daily API quota exceeded. Please try again tomorrow.');
+    }
+
+    // Check if API key is available
+    if (apiKey.isEmpty) {
+      throw Exception(
+          'OpenAI API key is missing. Please check your .env file.');
     }
 
     try {
@@ -287,6 +293,12 @@ class FoodApiService {
       throw Exception('Daily API quota exceeded. Please try again tomorrow.');
     }
 
+    // Check if API key is available
+    if (apiKey.isEmpty) {
+      throw Exception(
+          'OpenAI API key is missing. Please check your .env file.');
+    }
+
     try {
       // Construct the API endpoint
       var uri = Uri.https(baseUrl, chatEndpoint);
@@ -378,6 +390,12 @@ class FoodApiService {
     // Check if we've exceeded our daily quota
     if (await isDailyQuotaExceeded()) {
       throw Exception('Daily API quota exceeded. Please try again tomorrow.');
+    }
+
+    // Check if API key is available
+    if (apiKey.isEmpty) {
+      throw Exception(
+          'OpenAI API key is missing. Please check your .env file.');
     }
 
     try {
