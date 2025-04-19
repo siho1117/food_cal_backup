@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../config/theme.dart';
-import '../data/models/user_profile.dart';
-import '../widgets/activity_level_info_dialog.dart';
+import '../lib/config/theme.dart';
+import '../lib/data/models/user_profile.dart';
+import '../lib/widgets/activity_level_info_dialog.dart';
 import 'dart:math' as math;
 
 class CalorieCalculatorWidget extends StatelessWidget {

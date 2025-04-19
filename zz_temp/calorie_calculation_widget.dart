@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../config/theme.dart';
-import '../data/models/user_profile.dart'; // Add this import
+import '../lib/config/theme.dart';
+import '../lib/data/models/user_profile.dart'; // Add this import
 
 class CalorieCalculationWidget extends StatelessWidget {
   final UserProfile? userProfile;

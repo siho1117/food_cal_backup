@@ -1,7 +1,6 @@
 // lib/widgets/home/daily_summary_widget.dart
 import 'package:flutter/material.dart';
 import '../../config/theme.dart';
-import '../../data/models/food_item.dart';
 import '../../data/repositories/food_repository.dart';
 import '../../data/repositories/user_repository.dart';
 
