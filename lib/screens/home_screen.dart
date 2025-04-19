@@ -1,10 +1,25 @@
 // lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
-import '../widgets/home/target_calories_widget.dart'; // Import the new widget
+import '../widgets/home/target_calories_widget.dart';
+import '../widgets/home/daily_summary_widget.dart';
+import '../widgets/home/food_log_widget.dart';
+import '../widgets/food/food_entry_form.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  DateTime _selectedDate = DateTime.now();
+
+  void _refreshData() {
+    // Force a rebuild to refresh all data
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +32,7 @@ class HomeScreen extends StatelessWidget {
             children: [
               // Header with app name and collage style
               Container(
-                height: 280,
+                height: 200, // Reduced height from 280
                 padding: const EdgeInsets.all(20),
                 child: Stack(
                   children: [
@@ -55,48 +70,32 @@ class HomeScreen extends StatelessWidget {
                       right: 20,
                       top: 40,
                       child: Container(
-                        width: 120,
-                        height: 120,
+                        width: 100,
+                        height: 100,
                         decoration: BoxDecoration(
                           color: Colors.grey[300],
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
                           Icons.food_bank,
-                          size: 60,
+                          size: 50,
                           color: Colors.grey[500],
                         ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 30,
-                      left: 100,
-                      child: Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[300],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Icons.restaurant,
-                          size: 40,
-                          color: Colors.grey[500],
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 60,
-                      left: 30,
-                      child: Icon(
-                        Icons.local_cafe,
-                        color: AppTheme.primaryBlue,
-                        size: 36,
                       ),
                     ),
                   ],
                 ),
               ),
+
+              // Daily Summary Widget (NEW!)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: DailySummaryWidget(
+                  date: _selectedDate,
+                ),
+              ),
+
+              const SizedBox(height: 20),
 
               // Blue feature box
               Container(
@@ -118,7 +117,7 @@ class HomeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: const [
                         Icon(
                           Icons.breakfast_dining,
@@ -141,45 +140,118 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
 
-              // Target Calories Widget (NEW)
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    TargetCaloriesWidget(),
-                  ],
-                ),
-              ),
+              const SizedBox(height: 20),
 
-              // Today's summary
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'TODAY\'S SUMMARY',
-                      style: AppTheme.titleStyle,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildSummaryCard(),
-                  ],
-                ),
-              ),
-
-              // Recent meals
+              // Today's Food Log with Add Food button
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'RECENT MEALS',
-                      style: AppTheme.titleStyle,
+                    // Header row with title and add button
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'TODAY\'S FOOD LOG',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryBlue,
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('Add Food'),
+                          onPressed: () {
+                            // Show add food form
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => FoodEntryForm(
+                                  mealType: 'snack', // Default meal type
+                                  onSaved: _refreshData,
+                                ),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryBlue,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    _buildRecentMealsList(),
+
+                    const SizedBox(height: 10),
+
+                    // Food log widget
+                    FoodLogWidget(
+                      date: _selectedDate,
+                      showHeader:
+                          false, // Hide the header since we're showing it above
+                      onFoodAdded: _refreshData,
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Date selector for looking at different days
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios),
+                      onPressed: () {
+                        setState(() {
+                          _selectedDate =
+                              _selectedDate.subtract(const Duration(days: 1));
+                        });
+                      },
+                      color: AppTheme.primaryBlue,
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        final DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: _selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null && picked != _selectedDate) {
+                          setState(() {
+                            _selectedDate = picked;
+                          });
+                        }
+                      },
+                      child: Text(
+                        _isToday(_selectedDate)
+                            ? 'Today'
+                            : '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primaryBlue,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_forward_ios),
+                      onPressed: _selectedDate.year == DateTime.now().year &&
+                              _selectedDate.month == DateTime.now().month &&
+                              _selectedDate.day == DateTime.now().day
+                          ? null
+                          : () {
+                              setState(() {
+                                _selectedDate =
+                                    _selectedDate.add(const Duration(days: 1));
+                              });
+                            },
+                      color: AppTheme.primaryBlue,
+                    ),
                   ],
                 ),
               ),
@@ -192,173 +264,11 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSummaryCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            spreadRadius: 0,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _buildSummaryItem(
-                    'Calories', '1,200', '2,000', Colors.orange),
-              ),
-              Expanded(
-                child: _buildSummaryItem('Protein', '45g', '80g', Colors.red),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildSummaryItem('Carbs', '120g', '250g', Colors.green),
-              ),
-              Expanded(
-                child: _buildSummaryItem('Fat', '30g', '65g', Colors.blue),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryItem(
-      String label, String current, String target, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: Colors.grey,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Text(
-              current,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              ' / $target',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        LinearProgressIndicator(
-          value: 0.6, // 60% progress as a placeholder
-          backgroundColor: Colors.grey[200],
-          valueColor: AlwaysStoppedAnimation<Color>(color),
-          minHeight: 6,
-          borderRadius: BorderRadius.circular(3),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRecentMealsList() {
-    return ListView.builder(
-      physics: const NeverScrollableScrollPhysics(),
-      shrinkWrap: true,
-      itemCount: 3,
-      itemBuilder: (context, index) {
-        List<String> meals = ['Breakfast', 'Lunch', 'Dinner'];
-        List<String> times = ['8:30 AM', '12:45 PM', '7:15 PM'];
-        List<String> calories = ['320', '520', '450'];
-        List<IconData> icons = [
-          Icons.breakfast_dining,
-          Icons.lunch_dining,
-          Icons.dinner_dining
-        ];
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                spreadRadius: 0,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  icons[index],
-                  color: AppTheme.primaryBlue,
-                  size: 30,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      meals[index],
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      times[index],
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                '${calories[index]} kcal',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.primaryBlue,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+  // Helper method to check if a date is today
+  bool _isToday(DateTime date) {
+    final now = DateTime.now();
+    return date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day;
   }
 }

@@ -10,7 +10,7 @@ class SpoonacularApiService {
   final String baseUrl = 'api.spoonacular.com';
 
   // Daily quota limit - easy to change as needed
-  final int dailyQuotaLimit = 50;
+  final int dailyQuotaLimit = 150;
 
   // Keys for storing quota usage in SharedPreferences
   static const String _quotaUsedKey = 'spoonacular_quota_used';

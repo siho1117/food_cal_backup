@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import '../config/theme.dart';
 import '../widgets/custom_app_bar.dart';
+import 'food_recognition_results_screen.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({Key? key}) : super(key: key);
@@ -165,14 +166,30 @@ class CameraScreenState extends State<CameraScreen>
       }
 
       if (photo != null && mounted) {
-        // TODO: Implement saving and processing the captured image
-        // For now, just show a snackbar with the path
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Photo captured at: ${photo.path}'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        // Show meal type selection dialog
+        final mealType = await _showMealTypeSelector();
+
+        if (mealType != null && mounted) {
+          // Navigate to food recognition results screen
+          final result = await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => FoodRecognitionResultsScreen(
+                imageFile: File(photo.path),
+                mealType: mealType,
+              ),
+            ),
+          );
+
+          // If food was added successfully, show a confirmation
+          if (result == true) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Food added to your log'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -182,6 +199,55 @@ class CameraScreenState extends State<CameraScreen>
         });
       }
     }
+  }
+
+  Future<String?> _showMealTypeSelector() async {
+    return await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return SimpleDialog(
+          title: const Text('Select Meal Type'),
+          children: <Widget>[
+            _buildMealTypeOption(context, 'Breakfast', Icons.breakfast_dining),
+            _buildMealTypeOption(context, 'Lunch', Icons.lunch_dining),
+            _buildMealTypeOption(context, 'Dinner', Icons.dinner_dining),
+            _buildMealTypeOption(context, 'Snack', Icons.fastfood),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildMealTypeOption(
+      BuildContext context, String title, IconData icon) {
+    return SimpleDialogOption(
+      onPressed: () {
+        Navigator.pop(context, title.toLowerCase());
+      },
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryBlue.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: AppTheme.primaryBlue,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

@@ -1,7 +1,7 @@
 // lib/data/repositories/food_repository.dart
 import 'dart:io';
 import '../models/food_item.dart';
-import '../services/api_services.dart';
+import '../services/api_service.dart';
 import '../storage/local_storage.dart';
 
 /// Repository for managing food data from API and local storage
@@ -20,6 +20,9 @@ class FoodRepository {
       // Call the API to analyze the image
       final analysisResult = await _apiService.analyzeImage(imageFile);
 
+      // Print response for debugging
+      print('API Response: $analysisResult');
+
       // Save the image file for reference
       final savedImagePath = await _saveImageFile(imageFile);
 
@@ -32,31 +35,64 @@ class FoodRepository {
         final item = FoodItem.fromSpoonacularAnalysis(analysisResult, mealType)
             .copyWith(imagePath: savedImagePath);
         recognizedItems.add(item);
-      } else if (analysisResult.containsKey('annotations')) {
+      } else if (analysisResult.containsKey('annotations') &&
+          analysisResult['annotations'] is List &&
+          (analysisResult['annotations'] as List).isNotEmpty) {
         // Multiple food items recognized
         for (var annotation in analysisResult['annotations']) {
           try {
-            final foodInfo =
-                await _apiService.getFoodInformation(annotation['id']);
+            if (annotation.containsKey('id') && annotation['id'] != null) {
+              // Get detailed food information using the ID
+              print('Getting details for food ID: ${annotation['id']}');
+              final foodInfo =
+                  await _apiService.getFoodInformation(annotation['id']);
+              print('Food info: $foodInfo');
 
-            // Create food item from detailed info
-            final item = FoodItem(
-              id: DateTime.now().millisecondsSinceEpoch.toString() +
-                  '_${annotation['id']}',
-              name: annotation['name'] ?? 'Unknown Food',
-              calories: _extractNutrientValue(foodInfo, 'calories') ?? 0.0,
-              proteins: _extractNutrientValue(foodInfo, 'protein') ?? 0.0,
-              carbs: _extractNutrientValue(foodInfo, 'carbs') ?? 0.0,
-              fats: _extractNutrientValue(foodInfo, 'fat') ?? 0.0,
-              imagePath: savedImagePath,
-              mealType: mealType,
-              timestamp: DateTime.now(),
-              servingSize: 1.0,
-              servingUnit: 'serving',
-              spoonacularId: annotation['id'],
-            );
+              // Create food item with nutrition details
+              final item = FoodItem(
+                id: DateTime.now().millisecondsSinceEpoch.toString() +
+                    '_${annotation['id']}',
+                name: annotation['name'] ?? 'Unknown Food',
+                calories: _extractNutrientValue(foodInfo, 'calories') ?? 0.0,
+                proteins: _extractNutrientValue(foodInfo, 'protein') ?? 0.0,
+                carbs: _extractNutrientValue(foodInfo, 'carbs') ?? 0.0,
+                fats: _extractNutrientValue(foodInfo, 'fat') ?? 0.0,
+                imagePath: savedImagePath,
+                mealType: mealType,
+                timestamp: DateTime.now(),
+                servingSize: 1.0,
+                servingUnit: 'serving',
+                spoonacularId: annotation['id'],
+              );
 
-            recognizedItems.add(item);
+              // Print for debugging
+              print(
+                  'Created food item: ${item.name}, calories: ${item.calories}, proteins: ${item.proteins}, carbs: ${item.carbs}, fats: ${item.fats}');
+
+              recognizedItems.add(item);
+            } else {
+              // Add with limited information if ID is missing
+              print(
+                  'Creating food item with limited info for: ${annotation['name']}');
+              final item = FoodItem(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                name: annotation['name'] ?? 'Unknown Food',
+                // Try to get nutrition info directly from annotation if available
+                calories:
+                    annotation['nutrition']?['calories']?.toDouble() ?? 0.0,
+                proteins:
+                    annotation['nutrition']?['protein']?.toDouble() ?? 0.0,
+                carbs: annotation['nutrition']?['carbs']?.toDouble() ?? 0.0,
+                fats: annotation['nutrition']?['fat']?.toDouble() ?? 0.0,
+                imagePath: savedImagePath,
+                mealType: mealType,
+                timestamp: DateTime.now(),
+                servingSize: 1.0,
+                servingUnit: 'serving',
+              );
+
+              recognizedItems.add(item);
+            }
           } catch (e) {
             print('Error getting food details: $e');
             // Add with limited information if detailed call fails
@@ -80,13 +116,24 @@ class FoodRepository {
       } else if (analysisResult.containsKey('nutrition') &&
           analysisResult.containsKey('name')) {
         // Direct nutritional information with name
+        print('Creating food item from direct nutrition data');
+        final calories =
+            _extractNutrientValue(analysisResult, 'calories') ?? 0.0;
+        final proteins =
+            _extractNutrientValue(analysisResult, 'protein') ?? 0.0;
+        final carbs = _extractNutrientValue(analysisResult, 'carbs') ?? 0.0;
+        final fats = _extractNutrientValue(analysisResult, 'fat') ?? 0.0;
+
+        print(
+            'Extracted values: calories=$calories, proteins=$proteins, carbs=$carbs, fats=$fats');
+
         final item = FoodItem(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
           name: analysisResult['name'] ?? 'Unknown Food',
-          calories: _extractNutrientValue(analysisResult, 'calories') ?? 0.0,
-          proteins: _extractNutrientValue(analysisResult, 'protein') ?? 0.0,
-          carbs: _extractNutrientValue(analysisResult, 'carbs') ?? 0.0,
-          fats: _extractNutrientValue(analysisResult, 'fat') ?? 0.0,
+          calories: calories,
+          proteins: proteins,
+          carbs: carbs,
+          fats: fats,
           imagePath: savedImagePath,
           mealType: mealType,
           timestamp: DateTime.now(),
@@ -96,11 +143,58 @@ class FoodRepository {
 
         recognizedItems.add(item);
       } else {
+        // If we have no structured information but some text, create a generic food item
+        if (analysisResult.containsKey('text') &&
+            analysisResult['text'] is String) {
+          // Try to extract food name from text
+          final foodName = analysisResult['text'];
+
+          if (foodName.isNotEmpty) {
+            final item = FoodItem(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              name: foodName,
+              calories: 0.0, // No nutrition info available
+              proteins: 0.0,
+              carbs: 0.0,
+              fats: 0.0,
+              imagePath: savedImagePath,
+              mealType: mealType,
+              timestamp: DateTime.now(),
+              servingSize: 1.0,
+              servingUnit: 'serving',
+            );
+
+            recognizedItems.add(item);
+            return recognizedItems;
+          }
+        }
+
         // Fallback if no food is recognized or format is unexpected
+        print(
+            'Unrecognized response format. Available keys: ${analysisResult.keys.join(", ")}');
         throw Exception(
             'No food recognized in the image or unsupported response format');
       }
 
+      // For testing - if we got no items, add a dummy food item
+      if (recognizedItems.isEmpty && false) {
+        // Set to true for testing
+        recognizedItems.add(FoodItem(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          name: 'Test Food Item',
+          calories: 250.0,
+          proteins: 15.0,
+          carbs: 30.0,
+          fats: 8.0,
+          imagePath: savedImagePath,
+          mealType: mealType,
+          timestamp: DateTime.now(),
+          servingSize: 1.0,
+          servingUnit: 'serving',
+        ));
+      }
+
+      print('Recognized ${recognizedItems.length} food items');
       return recognizedItems;
     } catch (e) {
       print('Food recognition error: $e');
@@ -112,6 +206,21 @@ class FoodRepository {
   double? _extractNutrientValue(
       Map<String, dynamic> data, String nutrientName) {
     try {
+      print('Extracting $nutrientName from: $data');
+
+      // Direct access if the property exists at top level
+      if (data.containsKey(nutrientName)) {
+        final value = data[nutrientName];
+        if (value is num) {
+          return value.toDouble();
+        } else if (value is String) {
+          return double.tryParse(value);
+        } else if (value is Map && value.containsKey('value')) {
+          final numValue = value['value'];
+          return numValue is num ? numValue.toDouble() : null;
+        }
+      }
+
       if (data.containsKey('nutrition')) {
         final nutrition = data['nutrition'];
 
@@ -120,8 +229,11 @@ class FoodRepository {
           final value = nutrition[nutrientName];
           if (value is num) {
             return value.toDouble();
+          } else if (value is String) {
+            return double.tryParse(value);
           } else if (value is Map && value.containsKey('value')) {
-            return value['value']?.toDouble();
+            final numValue = value['value'];
+            return numValue is num ? numValue.toDouble() : null;
           }
         }
 
@@ -129,9 +241,11 @@ class FoodRepository {
         if (nutrition.containsKey('nutrients') &&
             nutrition['nutrients'] is List) {
           for (var nutrient in nutrition['nutrients']) {
-            if (nutrient['name'].toString().toLowerCase() ==
-                nutrientName.toLowerCase()) {
-              return nutrient['amount']?.toDouble();
+            // Case-insensitive comparison
+            final name = nutrient['name']?.toString().toLowerCase() ?? '';
+            if (name == nutrientName.toLowerCase()) {
+              final amount = nutrient['amount'];
+              return amount is num ? amount.toDouble() : null;
             }
           }
         }
@@ -173,6 +287,8 @@ class FoodRepository {
   /// Save a food entry to local storage
   Future<bool> saveFoodEntry(FoodItem item) async {
     try {
+      print(
+          'Saving food entry: ${item.name}, proteins=${item.proteins}, carbs=${item.carbs}, fats=${item.fats}');
       final entries = await getFoodEntries(item.timestamp);
       entries.add(item);
       return _saveFoodEntries(entries);
@@ -186,6 +302,14 @@ class FoodRepository {
   Future<bool> saveFoodEntries(List<FoodItem> items) async {
     try {
       if (items.isEmpty) return true;
+
+      print('Saving ${items.length} food entries');
+      // Print first item for debugging
+      if (items.isNotEmpty) {
+        final item = items.first;
+        print(
+            'First item: ${item.name}, proteins=${item.proteins}, carbs=${item.carbs}, fats=${item.fats}');
+      }
 
       // Group entries by date to ensure we don't overwrite entries from other dates
       final Map<String, List<FoodItem>> entriesByDate = {};
@@ -216,7 +340,18 @@ class FoodRepository {
   /// Get all food entries for a specific date
   Future<List<FoodItem>> getFoodEntries(DateTime date) async {
     try {
-      return await _getFoodEntriesForDate(date);
+      final entries = await _getFoodEntriesForDate(date);
+      print(
+          'Retrieved ${entries.length} food entries for ${_getDateKey(date)}');
+
+      // Debug: Print first entry if available
+      if (entries.isNotEmpty) {
+        final item = entries.first;
+        print(
+            'First item: ${item.name}, proteins=${item.proteins}, carbs=${item.carbs}, fats=${item.fats}');
+      }
+
+      return entries;
     } catch (e) {
       print('Error retrieving food entries: $e');
       return [];
@@ -241,6 +376,10 @@ class FoodRepository {
     try {
       final key = '${_foodEntriesKey}_$dateKey';
       final entriesMaps = entries.map((entry) => entry.toMap()).toList();
+
+      // Print for debugging
+      print('Saving ${entries.length} entries for date $dateKey');
+
       return await _storage.setObjectList(key, entriesMaps);
     } catch (e) {
       print('Error saving food entries for date $dateKey: $e');
@@ -306,6 +445,8 @@ class FoodRepository {
       DateTime date) async {
     try {
       final allEntries = await getFoodEntries(date);
+      print(
+          'Retrieved ${allEntries.length} total entries for ${_getDateKey(date)}');
 
       // Group entries by meal type
       final Map<String, List<FoodItem>> entriesByMeal = {
@@ -316,13 +457,26 @@ class FoodRepository {
       };
 
       for (final entry in allEntries) {
-        if (entriesByMeal.containsKey(entry.mealType.toLowerCase())) {
-          entriesByMeal[entry.mealType.toLowerCase()]!.add(entry);
+        final mealType = entry.mealType.toLowerCase();
+        if (entriesByMeal.containsKey(mealType)) {
+          entriesByMeal[mealType]!.add(entry);
         } else {
           // Default to snack if meal type is unknown
           entriesByMeal['snack']!.add(entry);
         }
       }
+
+      // Print summary of entries by meal type for debugging
+      entriesByMeal.forEach((mealType, entries) {
+        print('$mealType: ${entries.length} entries');
+
+        // Print nutritional data for the first entry in each meal type
+        if (entries.isNotEmpty) {
+          final item = entries.first;
+          print(
+              '  First item: ${item.name}, calories=${item.calories}, proteins=${item.proteins}, carbs=${item.carbs}, fats=${item.fats}');
+        }
+      });
 
       return entriesByMeal;
     } catch (e) {
@@ -339,32 +493,63 @@ class FoodRepository {
   /// Search for foods by name using the API
   Future<List<FoodItem>> searchFoods(String query, String mealType) async {
     try {
+      if (query.trim().isEmpty) {
+        return [];
+      }
+
       final searchResults = await _apiService.searchFoods(query);
+      print('Found ${searchResults.length} search results for "$query"');
 
       // Convert search results to FoodItem objects
       final List<FoodItem> foodItems = [];
 
       for (var result in searchResults) {
         try {
-          // Get detailed information for this food item
-          final foodInfo = await _apiService.getFoodInformation(result['id']);
+          // Check if result has a valid ID
+          if (result.containsKey('id') && result['id'] != null) {
+            // Get detailed information for this food item
+            final foodInfo = await _apiService.getFoodInformation(result['id']);
+            print('Got detailed info for ${result['name']}');
 
-          final item = FoodItem(
-            id: DateTime.now().millisecondsSinceEpoch.toString() +
-                '_${result['id']}',
-            name: result['name'] ?? 'Unknown Food',
-            calories: _extractNutrientValue(foodInfo, 'calories') ?? 0.0,
-            proteins: _extractNutrientValue(foodInfo, 'protein') ?? 0.0,
-            carbs: _extractNutrientValue(foodInfo, 'carbs') ?? 0.0,
-            fats: _extractNutrientValue(foodInfo, 'fat') ?? 0.0,
-            mealType: mealType,
-            timestamp: DateTime.now(),
-            servingSize: 1.0,
-            servingUnit: 'serving',
-            spoonacularId: result['id'],
-          );
+            final calories = _extractNutrientValue(foodInfo, 'calories') ?? 0.0;
+            final proteins = _extractNutrientValue(foodInfo, 'protein') ?? 0.0;
+            final carbs = _extractNutrientValue(foodInfo, 'carbs') ?? 0.0;
+            final fats = _extractNutrientValue(foodInfo, 'fat') ?? 0.0;
 
-          foodItems.add(item);
+            print(
+                'Extracted values: calories=$calories, proteins=$proteins, carbs=$carbs, fats=$fats');
+
+            final item = FoodItem(
+              id: DateTime.now().millisecondsSinceEpoch.toString() +
+                  '_${result['id']}',
+              name: result['name'] ?? 'Unknown Food',
+              calories: calories,
+              proteins: proteins,
+              carbs: carbs,
+              fats: fats,
+              mealType: mealType,
+              timestamp: DateTime.now(),
+              servingSize: 1.0,
+              servingUnit: 'serving',
+              spoonacularId: result['id'],
+            );
+
+            foodItems.add(item);
+          } else {
+            // Add with limited information if ID is missing
+            foodItems.add(FoodItem(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              name: result['name'] ?? 'Unknown Food',
+              calories: 0.0,
+              proteins: 0.0,
+              carbs: 0.0,
+              fats: 0.0,
+              mealType: mealType,
+              timestamp: DateTime.now(),
+              servingSize: 1.0,
+              servingUnit: 'serving',
+            ));
+          }
         } catch (e) {
           print('Error getting detailed food info: $e');
           // Add with limited information

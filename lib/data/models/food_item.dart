@@ -53,28 +53,64 @@ class FoodItem {
 
         // Extract calories
         if (nutrition.containsKey('calories')) {
-          calories = nutrition['calories']['value']?.toDouble() ?? 0.0;
+          if (nutrition['calories'] is num) {
+            calories = (nutrition['calories'] as num).toDouble();
+          } else if (nutrition['calories'] is Map &&
+              nutrition['calories'].containsKey('value')) {
+            calories =
+                (nutrition['calories']['value'] as num?)?.toDouble() ?? 0.0;
+          }
         }
 
         // Extract macronutrients from the nutrients array
         if (nutrition.containsKey('nutrients') &&
             nutrition['nutrients'] is List) {
           for (var nutrient in nutrition['nutrients']) {
-            if (nutrient['name'] == 'Protein') {
-              proteins = nutrient['amount']?.toDouble() ?? 0.0;
-            } else if (nutrient['name'] == 'Carbohydrates') {
-              carbs = nutrient['amount']?.toDouble() ?? 0.0;
-            } else if (nutrient['name'] == 'Fat') {
-              fats = nutrient['amount']?.toDouble() ?? 0.0;
+            if (nutrient['name'] == 'Protein' ||
+                nutrient['name'] == 'protein') {
+              proteins = (nutrient['amount'] as num?)?.toDouble() ?? 0.0;
+            } else if (nutrient['name'] == 'Carbohydrates' ||
+                nutrient['name'] == 'carbohydrates') {
+              carbs = (nutrient['amount'] as num?)?.toDouble() ?? 0.0;
+            } else if (nutrient['name'] == 'Fat' || nutrient['name'] == 'fat') {
+              fats = (nutrient['amount'] as num?)?.toDouble() ?? 0.0;
             }
           }
         }
+
+        // Fallback: try direct properties if nutrients array didn't work
+        if (proteins == 0.0 && nutrition.containsKey('protein')) {
+          proteins = _extractNumericValue(nutrition['protein']) ?? 0.0;
+        }
+        if (carbs == 0.0 && nutrition.containsKey('carbs')) {
+          carbs = _extractNumericValue(nutrition['carbs']) ?? 0.0;
+        }
+        if (fats == 0.0 && nutrition.containsKey('fat')) {
+          fats = _extractNumericValue(nutrition['fat']) ?? 0.0;
+        }
+      }
+
+      // Extra validation - ensure we have at least some nutritional data
+      // If all macros are zero but we have calories, estimate macros using standard ratios
+      if (proteins == 0.0 && carbs == 0.0 && fats == 0.0 && calories > 0) {
+        // Standard ratio - 20% protein, 50% carbs, 30% fat
+        proteins = (calories * 0.2) / 4; // 4 calories per gram of protein
+        carbs = (calories * 0.5) / 4; // 4 calories per gram of carbs
+        fats = (calories * 0.3) / 9; // 9 calories per gram of fat
       }
 
       // Try to extract Spoonacular ID
       if (data.containsKey('id')) {
-        spoonacularId = data['id'];
+        if (data['id'] is int) {
+          spoonacularId = data['id'];
+        } else if (data['id'] is String) {
+          spoonacularId = int.tryParse(data['id']);
+        }
       }
+
+      // Print debug information
+      print(
+          'Creating FoodItem: name=$name, calories=$calories, proteins=$proteins, carbs=$carbs, fats=$fats');
 
       return FoodItem(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -107,6 +143,19 @@ class FoodItem {
     }
   }
 
+  /// Helper method to extract numeric values from different formats
+  static double? _extractNumericValue(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    if (value is Map && value.containsKey('value')) {
+      return (value['value'] as num?)?.toDouble();
+    }
+    if (value is String) {
+      return double.tryParse(value);
+    }
+    return null;
+  }
+
   /// Create a FoodItem from Spoonacular ingredient information
   factory FoodItem.fromSpoonacularIngredient(
       Map<String, dynamic> data, String mealType) {
@@ -116,7 +165,7 @@ class FoodItem {
       double carbs = 0.0;
       double fats = 0.0;
       String name = data['name'] ?? 'Unknown Ingredient';
-      int? spoonacularId = data['id'];
+      int? spoonacularId = data['id'] is int ? data['id'] : null;
 
       // Extract nutrition information if available
       if (data.containsKey('nutrition')) {
@@ -127,7 +176,8 @@ class FoodItem {
           for (var nutrient in nutrition['nutrients']) {
             final nutrientName =
                 nutrient['name']?.toString().toLowerCase() ?? '';
-            final amount = nutrient['amount']?.toDouble() ?? 0.0;
+            final amount =
+                nutrient['amount'] is num ? nutrient['amount'].toDouble() : 0.0;
 
             if (nutrientName == 'calories') {
               calories = amount;
@@ -141,6 +191,10 @@ class FoodItem {
           }
         }
       }
+
+      // Print debug information
+      print(
+          'Creating FoodItem from ingredient: name=$name, calories=$calories, proteins=$proteins, carbs=$carbs, fats=$fats');
 
       return FoodItem(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -192,6 +246,9 @@ class FoodItem {
 
   /// Create from Map for retrieval from storage
   factory FoodItem.fromMap(Map<String, dynamic> map) {
+    // Print debug info for troubleshooting
+    print('Loading FoodItem from map: $map');
+
     return FoodItem(
       id: map['id'],
       name: map['name'],
@@ -241,11 +298,25 @@ class FoodItem {
 
   /// Calculate adjusted nutritional values based on serving size
   Map<String, double> getNutritionForServing() {
+    // Print debug information to check values
+    print(
+        'Nutrition values before adjustment: calories=$calories, proteins=$proteins, carbs=$carbs, fats=$fats');
+    print('Serving size: $servingSize');
+
+    final adjustedCalories = calories * servingSize;
+    final adjustedProteins = proteins * servingSize;
+    final adjustedCarbs = carbs * servingSize;
+    final adjustedFats = fats * servingSize;
+
+    // Print adjusted values
+    print(
+        'Adjusted values: calories=$adjustedCalories, proteins=$adjustedProteins, carbs=$adjustedCarbs, fats=$adjustedFats');
+
     return {
-      'calories': calories * servingSize,
-      'proteins': proteins * servingSize,
-      'carbs': carbs * servingSize,
-      'fats': fats * servingSize,
+      'calories': adjustedCalories,
+      'proteins': adjustedProteins,
+      'carbs': adjustedCarbs,
+      'fats': adjustedFats,
     };
   }
 
