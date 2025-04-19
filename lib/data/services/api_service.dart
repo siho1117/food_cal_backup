@@ -278,6 +278,7 @@ class FoodApiService {
       // Match against food database using keywords
       String bestMatchName = "Unknown Food";
       int highestMatches = 0;
+      double highestScore = 0.0;
 
       for (final entry in _foodDatabase.entries) {
         final foodName = entry.key;
@@ -285,31 +286,58 @@ class FoodApiService {
         final keywords = foodInfo['keywords'] as List<String>;
 
         int matches = 0;
+        double matchScore = 0.0;
 
         // Check each keyword against the labels
         for (final keyword in keywords) {
-          if (labels.any(
-              (label) => label.contains(keyword) || keyword.contains(label))) {
-            matches++;
+          for (final label in labels) {
+            // Exact match gets highest score
+            if (label == keyword) {
+              matches += 3;
+              matchScore += 3.0;
+            }
+            // Contains match gets medium score
+            else if (label.contains(keyword) || keyword.contains(label)) {
+              matches += 1;
+              matchScore += 1.0;
+            }
           }
         }
 
-        // Check if food name itself is in the labels
-        if (labels.any(
-            (label) => label.contains(foodName) || foodName.contains(label))) {
-          matches += 2; // Give higher weight to food name match
+        // Check if food name itself is in the labels with higher weight
+        for (final label in labels) {
+          if (label == foodName) {
+            matches += 4; // Exact match with food name is highest priority
+            matchScore += 4.0;
+          } else if (label.contains(foodName) || foodName.contains(label)) {
+            matches += 2; // Partial match with food name is medium priority
+            matchScore += 2.0;
+          }
         }
 
-        if (matches > highestMatches) {
+        // Consider label confidence scores if available (not implemented here but could be added)
+
+        // Debug: print match info
+        if (matches > 0) {
+          print('Food: $foodName, Matches: $matches, Score: $matchScore');
+        }
+
+        // Update best match if this one has higher score
+        if (matches > highestMatches ||
+            (matches == highestMatches && matchScore > highestScore)) {
           highestMatches = matches;
+          highestScore = matchScore;
           bestMatchName = foodName;
         }
       }
 
-      // Default if no match found
+      // Only return a match if we have at least some confidence
       if (highestMatches == 0) {
         return _getDefaultFood();
       }
+
+      print(
+          'Best match: $bestMatchName with $highestMatches matches and score $highestScore');
 
       // Return the matched food with its nutritional info
       final matchedFood = _foodDatabase[bestMatchName]!;
