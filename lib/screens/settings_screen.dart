@@ -9,12 +9,18 @@ import '../widgets/settings/height_picker_dialog.dart';
 import '../widgets/settings/gender_selection_dialog.dart';
 import '../widgets/settings/activity_level_dialog.dart';
 import '../widgets/settings/feedback_widget.dart';
-import '../widgets/settings/monthly_weight_goal_dialog.dart'; // New import
+import '../widgets/settings/monthly_weight_goal_dialog.dart';
 import '../widgets/weight_entry_dialog.dart';
-import '../utils/formula.dart'; // Import the Formula utility
+import '../utils/formula.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({Key? key}) : super(key: key);
+  // New parameter to check if we should show back button
+  final bool showBackButton;
+
+  const SettingsScreen({
+    Key? key,
+    this.showBackButton = false,
+  }) : super(key: key);
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -300,40 +306,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return Scaffold(
       backgroundColor: secondaryBeige,
+      // Add an app bar with back button when needed
+      appBar: widget.showBackButton
+          ? AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                color: primaryBlue,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              title: const Text(
+                'Settings',
+                style: TextStyle(
+                  color: Color(0xFF0052CC),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            )
+          : null,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
-              Row(
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'FOOD CAL',
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: primaryBlue,
-                          letterSpacing: 2,
+              // Header - only show this if not showing the appbar
+              if (!widget.showBackButton)
+                Row(
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'FOOD CAL',
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: primaryBlue,
+                            letterSpacing: 2,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'SETTINGS',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey,
+                        const SizedBox(height: 8),
+                        const Text(
+                          'SETTINGS',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                      ],
+                    ),
+                  ],
+                ),
 
               const SizedBox(height: 20),
 

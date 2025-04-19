@@ -1,17 +1,14 @@
 import 'package:flutter/material.dart';
-import '../widgets/weight_entry_dialog.dart';
-import '../widgets/target_weight_dialog.dart';
-import '../widgets/target_weight_widget.dart';
-import '../widgets/bmr_calculator_widget.dart';
-import '../widgets/tdee_calculator_widget.dart'; // Import the new TDEE widget
+import '../widgets/weight_entry_dialog.dart'; // Kept in the original location
+import '../widgets/progress/target_weight_dialog.dart'; // Updated path
+import '../widgets/progress/target_weight_widget.dart'; // Updated path
+import '../widgets/progress/bmr_calculator_widget.dart'; // Updated path
+import '../widgets/progress/tdee_calculator_widget.dart'; // Updated path
 import '../data/repositories/user_repository.dart';
 import '../data/models/weight_entry.dart';
 import '../data/models/user_profile.dart';
 import '../widgets/progress/bmi_widget.dart';
 import '../widgets/progress/body_fat_widget.dart';
-import '../widgets/progress/stat_card_widget.dart';
-import '../widgets/progress/weekly_chart_widget.dart';
-import '../widgets/progress/nutrition_chart_widget.dart';
 import '../config/theme.dart';
 
 class ProgressScreen extends StatefulWidget {
@@ -145,61 +142,6 @@ class _ProgressScreenState extends State<ProgressScreen> {
     return displayWeight.toStringAsFixed(1) + (_isMetric ? ' kg' : ' lbs');
   }
 
-  // Calculate body fat percentage using the Deurenberg formula
-  double? _calculateBodyFat(double? bmi, int? age, String? gender) {
-    if (bmi == null) return null;
-
-    // Default age if not available - using 30 as a reasonable middle value
-    final int calculationAge = age ?? 30;
-
-    // Deurenberg formula: Body Fat % = 1.2 × BMI + 0.23 × age - 10.8 × sex - 5.4
-    // Where sex is 1 for males and 0 for females
-    double genderFactor;
-    if (gender == 'Male') {
-      genderFactor = 1.0;
-    } else if (gender == 'Female') {
-      genderFactor = 0.0;
-    } else {
-      // If gender not specified, use an average (0.5)
-      // This is a compromise for unknown gender
-      genderFactor = 0.5;
-    }
-
-    // Calculate using the formula
-    double result =
-        (1.2 * bmi) + (0.23 * calculationAge) - (10.8 * genderFactor) - 5.4;
-
-    // Ensure result is in a reasonable range (minimum 3%, maximum 60%)
-    return result.clamp(3.0, 60.0);
-  }
-
-  // Get classification for body fat percentage - gender specific
-  String _getBodyFatClassification(double bodyFat, String? gender) {
-    if (gender == 'Male') {
-      if (bodyFat < 6) return 'Essential';
-      if (bodyFat < 14) return 'Athletic';
-      if (bodyFat < 18) return 'Fitness';
-      if (bodyFat < 25) return 'Average';
-      if (bodyFat < 30) return 'Above Avg';
-      return 'Obese';
-    } else if (gender == 'Female') {
-      if (bodyFat < 14) return 'Essential';
-      if (bodyFat < 21) return 'Athletic';
-      if (bodyFat < 25) return 'Fitness';
-      if (bodyFat < 32) return 'Average';
-      if (bodyFat < 38) return 'Above Avg';
-      return 'Obese';
-    } else {
-      // Gender-neutral classifications (compromise)
-      if (bodyFat < 10) return 'Essential';
-      if (bodyFat < 18) return 'Athletic';
-      if (bodyFat < 22) return 'Fitness';
-      if (bodyFat < 28) return 'Average';
-      if (bodyFat < 35) return 'Above Avg';
-      return 'Obese';
-    }
-  }
-
   // Current weight card widget
   Widget _buildCurrentWeightCard() {
     return GestureDetector(
@@ -304,7 +246,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
               const SizedBox(height: 20),
 
-              // TDEE Calculator Widget - Added the new widget here
+              // TDEE Calculator Widget
               TDEECalculatorWidget(
                 userProfile: _userProfile,
                 currentWeight: _currentWeight,
@@ -338,14 +280,17 @@ class _ProgressScreenState extends State<ProgressScreen> {
                     final String? gender = _userProfile?.gender;
                     final int? age = _userProfile?.age;
 
-                    // Calculate body fat using the formula
-                    final bodyFatValue =
-                        _calculateBodyFat(bmiValue, age, gender);
+                    // Calculate body fat using the formula in the repository
+                    double? bodyFatValue;
                     String bodyFatClassification = "";
 
-                    if (bodyFatValue != null) {
-                      bodyFatClassification =
-                          _getBodyFatClassification(bodyFatValue, gender);
+                    if (bmiValue != null) {
+                      bodyFatValue = _calculateBodyFat(bmiValue, age, gender);
+
+                      if (bodyFatValue != null) {
+                        bodyFatClassification =
+                            _getBodyFatClassification(bodyFatValue, gender);
+                      }
                     }
 
                     return Row(
@@ -370,72 +315,66 @@ class _ProgressScreenState extends State<ProgressScreen> {
                 ),
               ),
 
-              const SizedBox(height: 20),
-
-              // Weekly summary
-              const Text(
-                'WEEKLY OVERVIEW',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.primaryBlue,
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Weekly chart widget
-              const WeeklyChartWidget(),
-
-              const SizedBox(height: 20),
-
-              // Stats section
-              Row(
-                children: [
-                  Expanded(
-                    child: StatCardWidget(
-                      title: 'Average Daily',
-                      value: '1,850',
-                      unit: 'kcal',
-                      icon: Icons.local_fire_department,
-                      color: Colors.orange,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: StatCardWidget(
-                      title: 'This Week',
-                      value: '-2.5',
-                      unit: 'lbs',
-                      icon: Icons.trending_down,
-                      color: Colors.green,
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              // Nutrition breakdown
-              const Text(
-                'NUTRITION BREAKDOWN',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.primaryBlue,
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Nutrition chart widget
-              const NutritionChartWidget(),
-
               const SizedBox(height: 80), // Extra space for bottom nav
             ],
           ),
         ),
       ),
     );
+  }
+
+  // Calculate body fat percentage using the Deurenberg formula
+  double? _calculateBodyFat(double? bmi, int? age, String? gender) {
+    if (bmi == null) return null;
+
+    // Default age if not available - using 30 as a reasonable middle value
+    final int calculationAge = age ?? 30;
+
+    // Deurenberg formula: Body Fat % = 1.2 × BMI + 0.23 × age - 10.8 × sex - 5.4
+    // Where sex is 1 for males and 0 for females
+    double genderFactor;
+    if (gender == 'Male') {
+      genderFactor = 1.0;
+    } else if (gender == 'Female') {
+      genderFactor = 0.0;
+    } else {
+      // If gender not specified, use an average (0.5)
+      // This is a compromise for unknown gender
+      genderFactor = 0.5;
+    }
+
+    // Calculate using the formula
+    double result =
+        (1.2 * bmi) + (0.23 * calculationAge) - (10.8 * genderFactor) - 5.4;
+
+    // Ensure result is in a reasonable range (minimum 3%, maximum 60%)
+    return result.clamp(3.0, 60.0);
+  }
+
+  // Get classification for body fat percentage - gender specific
+  String _getBodyFatClassification(double bodyFat, String? gender) {
+    if (gender == 'Male') {
+      if (bodyFat < 6) return 'Essential';
+      if (bodyFat < 14) return 'Athletic';
+      if (bodyFat < 18) return 'Fitness';
+      if (bodyFat < 25) return 'Average';
+      if (bodyFat < 30) return 'Above Avg';
+      return 'Obese';
+    } else if (gender == 'Female') {
+      if (bodyFat < 14) return 'Essential';
+      if (bodyFat < 21) return 'Athletic';
+      if (bodyFat < 25) return 'Fitness';
+      if (bodyFat < 32) return 'Average';
+      if (bodyFat < 38) return 'Above Avg';
+      return 'Obese';
+    } else {
+      // Gender-neutral classifications (compromise)
+      if (bodyFat < 10) return 'Essential';
+      if (bodyFat < 18) return 'Athletic';
+      if (bodyFat < 22) return 'Fitness';
+      if (bodyFat < 28) return 'Average';
+      if (bodyFat < 35) return 'Above Avg';
+      return 'Obese';
+    }
   }
 }

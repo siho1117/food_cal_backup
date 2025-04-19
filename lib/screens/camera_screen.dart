@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import '../config/theme.dart';
 import '../widgets/custom_app_bar.dart';
 import 'food_recognition_results_screen.dart';
+import 'settings_screen.dart'; // Import settings screen directly
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({Key? key}) : super(key: key);
@@ -250,6 +251,17 @@ class CameraScreenState extends State<CameraScreen>
     );
   }
 
+  // Navigate to settings with back button
+  void _navigateToSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const SettingsScreen(
+          showBackButton: true, // Show back button
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -260,11 +272,26 @@ class CameraScreenState extends State<CameraScreen>
   }
 
   PreferredSizeWidget _buildAppBar() {
-    return CustomAppBar(
-      onSettingsTap: () {
-        // Navigate to settings from camera screen
-        Navigator.of(context).pushNamed('/settings');
-      },
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      title: const Text(
+        'Camera',
+        style: TextStyle(
+          color: AppTheme.primaryBlue,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      actions: [
+        // Settings button
+        IconButton(
+          icon: const Icon(
+            Icons.settings,
+            color: AppTheme.primaryBlue,
+          ),
+          onPressed: _navigateToSettings, // Use our new navigation method
+        ),
+      ],
     );
   }
 

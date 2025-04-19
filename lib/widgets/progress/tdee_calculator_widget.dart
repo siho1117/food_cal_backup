@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../config/theme.dart';
-import '../data/models/user_profile.dart';
-import '../widgets/activity_level_info_dialog.dart';
-import '../utils/formula.dart'; // Import our new Formula utility
+import '../../config/theme.dart';
+import '../../data/models/user_profile.dart';
+import '../activity_level_info_dialog.dart';
+import '../../utils/formula.dart'; // Import our new Formula utility
 
 class TDEECalculatorWidget extends StatelessWidget {
   final UserProfile? userProfile;

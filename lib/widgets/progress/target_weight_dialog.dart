@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import '../config/theme.dart';
+import '../../config/theme.dart';
 
 class TargetWeightDialog extends StatefulWidget {
   final double? initialTargetWeight;
