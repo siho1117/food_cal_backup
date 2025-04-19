@@ -10,7 +10,7 @@ import '../widgets/settings/gender_selection_dialog.dart';
 import '../widgets/settings/activity_level_dialog.dart';
 import '../widgets/settings/feedback_widget.dart';
 import '../widgets/settings/monthly_weight_goal_dialog.dart';
-import '../widgets/weight_entry_dialog.dart';
+import '../widgets/settings/weight_entry_dialog.dart';
 import '../utils/formula.dart';
 
 class SettingsScreen extends StatefulWidget {

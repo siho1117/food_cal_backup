@@ -1,12 +1,12 @@
 // lib/data/repositories/food_repository.dart
 import 'dart:io';
 import '../models/food_item.dart';
-import '../services/api_service.dart';
+import '../services/api_service.dart'; // Make sure imports match your renamed service
 import '../storage/local_storage.dart';
 
 /// Repository for managing food data from API and local storage
 class FoodRepository {
-  final SpoonacularApiService _apiService = SpoonacularApiService();
+  final FoodApiService _apiService = FoodApiService(); // Updated service name
   final LocalStorage _storage = LocalStorage();
 
   static const String _foodEntriesKey = 'food_entries';
@@ -29,10 +29,10 @@ class FoodRepository {
       // Process the results
       final List<FoodItem> recognizedItems = [];
 
-      // Process response format - Spoonacular may return different structures
+      // Process response format - may have different structures
       if (analysisResult.containsKey('category')) {
         // Single food item recognized (typical case)
-        final item = FoodItem.fromSpoonacularAnalysis(analysisResult, mealType)
+        final item = FoodItem.fromApiAnalysis(analysisResult, mealType)
             .copyWith(imagePath: savedImagePath);
         recognizedItems.add(item);
       } else if (analysisResult.containsKey('annotations') &&
@@ -41,17 +41,17 @@ class FoodRepository {
         // Multiple food items recognized
         for (var annotation in analysisResult['annotations']) {
           try {
-            if (annotation.containsKey('id') && annotation['id'] != null) {
-              // Get detailed food information using the ID
-              print('Getting details for food ID: ${annotation['id']}');
+            if (annotation.containsKey('name') && annotation['name'] != null) {
+              // Get detailed food information using the name
+              print('Getting details for food: ${annotation['name']}');
               final foodInfo =
-                  await _apiService.getFoodInformation(annotation['id']);
+                  await _apiService.getFoodInformation(annotation['name']);
               print('Food info: $foodInfo');
 
               // Create food item with nutrition details
               final item = FoodItem(
                 id: DateTime.now().millisecondsSinceEpoch.toString() +
-                    '_${annotation['id']}',
+                    '_${annotation['name']}',
                 name: annotation['name'] ?? 'Unknown Food',
                 calories: _extractNutrientValue(foodInfo, 'calories') ?? 0.0,
                 proteins: _extractNutrientValue(foodInfo, 'protein') ?? 0.0,
@@ -62,7 +62,7 @@ class FoodRepository {
                 timestamp: DateTime.now(),
                 servingSize: 1.0,
                 servingUnit: 'serving',
-                spoonacularId: annotation['id'],
+                spoonacularId: null, // Removed specific API reference
               );
 
               // Print for debugging
@@ -71,12 +71,12 @@ class FoodRepository {
 
               recognizedItems.add(item);
             } else {
-              // Add with limited information if ID is missing
+              // Add with limited information if name is missing
               print(
-                  'Creating food item with limited info for: ${annotation['name']}');
+                  'Creating food item with limited info for: ${annotation['description'] ?? 'Unknown'}');
               final item = FoodItem(
                 id: DateTime.now().millisecondsSinceEpoch.toString(),
-                name: annotation['name'] ?? 'Unknown Food',
+                name: annotation['description'] ?? 'Unknown Food',
                 // Try to get nutrition info directly from annotation if available
                 calories:
                     annotation['nutrition']?['calories']?.toDouble() ?? 0.0,
@@ -98,7 +98,7 @@ class FoodRepository {
             // Add with limited information if detailed call fails
             final item = FoodItem(
               id: DateTime.now().millisecondsSinceEpoch.toString(),
-              name: annotation['name'] ?? 'Unknown Food',
+              name: annotation['description'] ?? 'Unknown Food',
               calories: 0.0,
               proteins: 0.0,
               carbs: 0.0,
@@ -500,16 +500,22 @@ class FoodRepository {
       final searchResults = await _apiService.searchFoods(query);
       print('Found ${searchResults.length} search results for "$query"');
 
-      // Convert search results to FoodItem objects
+      // Convert search results to// Convert search results to FoodItem objects
       final List<FoodItem> foodItems = [];
 
       for (var result in searchResults) {
         try {
-          // Check if result has a valid ID
-          if (result.containsKey('id') && result['id'] != null) {
-            // Get detailed information for this food item
-            final foodInfo = await _apiService.getFoodInformation(result['id']);
-            print('Got detailed info for ${result['name']}');
+          // Check if result has a valid ID or name
+          if (result.containsKey('name') && result['name'] != null) {
+            // Get detailed information for this food item if needed
+            Map<String, dynamic> foodInfo = result;
+
+            // If the result doesn't have nutrition info, fetch it
+            if (!result.containsKey('nutrition') ||
+                result['nutrition'] == null) {
+              foodInfo = await _apiService.getFoodInformation(result['name']);
+              print('Got detailed info for ${result['name']}');
+            }
 
             final calories = _extractNutrientValue(foodInfo, 'calories') ?? 0.0;
             final proteins = _extractNutrientValue(foodInfo, 'protein') ?? 0.0;
@@ -521,7 +527,7 @@ class FoodRepository {
 
             final item = FoodItem(
               id: DateTime.now().millisecondsSinceEpoch.toString() +
-                  '_${result['id']}',
+                  '_${result['name']}',
               name: result['name'] ?? 'Unknown Food',
               calories: calories,
               proteins: proteins,
@@ -531,12 +537,12 @@ class FoodRepository {
               timestamp: DateTime.now(),
               servingSize: 1.0,
               servingUnit: 'serving',
-              spoonacularId: result['id'],
+              spoonacularId: result['id'], // Keep for backward compatibility
             );
 
             foodItems.add(item);
           } else {
-            // Add with limited information if ID is missing
+            // Add with limited information if name is missing
             foodItems.add(FoodItem(
               id: DateTime.now().millisecondsSinceEpoch.toString(),
               name: result['name'] ?? 'Unknown Food',

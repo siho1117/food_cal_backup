@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart'; // Import dotenv
 import 'config/theme.dart';
 import 'screens/splash_screen.dart';
 import 'screens/home_screen.dart';
@@ -9,7 +10,15 @@ import 'screens/settings_screen.dart';
 import 'widgets/custom_bottom_nav.dart';
 import 'widgets/custom_app_bar.dart';
 
-void main() {
+// Load environment variables before the app starts
+Future<void> main() async {
+  // Ensure Flutter is initialized
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Load .env file
+  await dotenv.load();
+
+  // Run the app
   runApp(const MyApp());
 }
 

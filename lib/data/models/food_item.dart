@@ -13,7 +13,7 @@ class FoodItem {
   final DateTime timestamp;
   final double servingSize;
   final String servingUnit;
-  final int? spoonacularId; // Optional ID from Spoonacular for reference
+  final int? spoonacularId; // Kept for backward compatibility
 
   FoodItem({
     required this.id,
@@ -30,9 +30,8 @@ class FoodItem {
     this.spoonacularId,
   });
 
-  /// Create a FoodItem from Spoonacular image analysis response
-  factory FoodItem.fromSpoonacularAnalysis(
-      Map<String, dynamic> data, String mealType) {
+  /// Create a FoodItem from API image analysis response (generic format)
+  factory FoodItem.fromApiAnalysis(Map<String, dynamic> data, String mealType) {
     try {
       // Default values if something is missing
       double calories = 0.0;
@@ -99,7 +98,7 @@ class FoodItem {
         fats = (calories * 0.3) / 9; // 9 calories per gram of fat
       }
 
-      // Try to extract Spoonacular ID
+      // Try to extract API-specific ID if provided
       if (data.containsKey('id')) {
         if (data['id'] is int) {
           spoonacularId = data['id'];
@@ -154,76 +153,6 @@ class FoodItem {
       return double.tryParse(value);
     }
     return null;
-  }
-
-  /// Create a FoodItem from Spoonacular ingredient information
-  factory FoodItem.fromSpoonacularIngredient(
-      Map<String, dynamic> data, String mealType) {
-    try {
-      double calories = 0.0;
-      double proteins = 0.0;
-      double carbs = 0.0;
-      double fats = 0.0;
-      String name = data['name'] ?? 'Unknown Ingredient';
-      int? spoonacularId = data['id'] is int ? data['id'] : null;
-
-      // Extract nutrition information if available
-      if (data.containsKey('nutrition')) {
-        final nutrition = data['nutrition'];
-
-        if (nutrition.containsKey('nutrients') &&
-            nutrition['nutrients'] is List) {
-          for (var nutrient in nutrition['nutrients']) {
-            final nutrientName =
-                nutrient['name']?.toString().toLowerCase() ?? '';
-            final amount =
-                nutrient['amount'] is num ? nutrient['amount'].toDouble() : 0.0;
-
-            if (nutrientName == 'calories') {
-              calories = amount;
-            } else if (nutrientName == 'protein') {
-              proteins = amount;
-            } else if (nutrientName == 'carbohydrates') {
-              carbs = amount;
-            } else if (nutrientName == 'fat') {
-              fats = amount;
-            }
-          }
-        }
-      }
-
-      // Print debug information
-      print(
-          'Creating FoodItem from ingredient: name=$name, calories=$calories, proteins=$proteins, carbs=$carbs, fats=$fats');
-
-      return FoodItem(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        name: name,
-        calories: calories,
-        proteins: proteins,
-        carbs: carbs,
-        fats: fats,
-        mealType: mealType,
-        timestamp: DateTime.now(),
-        servingSize: 1.0,
-        servingUnit: 'serving',
-        spoonacularId: spoonacularId,
-      );
-    } catch (e) {
-      print('Error creating FoodItem from ingredient: $e');
-      return FoodItem(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        name: 'Unknown Ingredient',
-        calories: 0.0,
-        proteins: 0.0,
-        carbs: 0.0,
-        fats: 0.0,
-        mealType: mealType,
-        timestamp: DateTime.now(),
-        servingSize: 1.0,
-        servingUnit: 'serving',
-      );
-    }
   }
 
   /// Convert to Map for storage

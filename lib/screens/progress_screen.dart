@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../widgets/weight_entry_dialog.dart'; // Kept in the original location
+import '../widgets/settings/weight_entry_dialog.dart'; // Kept in the original location
 import '../widgets/progress/target_weight_dialog.dart'; // Updated path
 import '../widgets/progress/target_weight_widget.dart'; // Updated path
 import '../widgets/progress/bmr_calculator_widget.dart'; // Updated path
