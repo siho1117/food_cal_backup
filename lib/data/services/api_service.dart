@@ -2,19 +2,27 @@
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart'; // Add image compression library
 
 /// Service to interact with the Food API for food recognition
 class FoodApiService {
-  // Get API key from environment variables
-  final String apiKey = dotenv.env['API_KEY'] ?? '';
+  // Use the OpenAI API key
+  final String apiKey =
+      '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';
 
-  // Base URL for API calls - can be changed as needed
-  final String baseUrl = 'vision.googleapis.com';
+  // Model names
+  final String visionModel = 'gpt-4.1-mini'; // Using gpt-4.1-nano for vision
+  final String textModel = 'gpt-4.1-nano'; // Using gpt-4.1-nano for text
 
-  // Endpoint for image analysis
-  final String imageAnalysisEndpoint = '/v1/images:annotate';
+  // Base URL for OpenAI API calls
+  final String baseUrl = 'api.openai.com';
+
+  // Endpoint for OpenAI Vision API
+  final String visionEndpoint = '/v1/chat/completions';
+
+  // Endpoint for OpenAI Chat API
+  final String chatEndpoint = '/v1/chat/completions';
 
   // Daily quota limit - easy to change as needed
   final int dailyQuotaLimit = 150;
@@ -22,136 +30,6 @@ class FoodApiService {
   // Keys for storing quota usage in SharedPreferences
   static const String _quotaUsedKey = 'food_api_quota_used';
   static const String _quotaDateKey = 'food_api_quota_date';
-
-  // Food database with nutritional information and keywords for matching
-  final Map<String, Map<String, dynamic>> _foodDatabase = {
-    "apple": {
-      "keywords": ["apple", "fruit", "red fruit", "green fruit"],
-      "calories": 95.0,
-      "protein": 0.5,
-      "carbs": 25.0,
-      "fat": 0.3
-    },
-    "banana": {
-      "keywords": ["banana", "fruit", "yellow fruit"],
-      "calories": 105.0,
-      "protein": 1.3,
-      "carbs": 27.0,
-      "fat": 0.4
-    },
-    "orange": {
-      "keywords": ["orange", "fruit", "citrus"],
-      "calories": 65.0,
-      "protein": 1.3,
-      "carbs": 16.0,
-      "fat": 0.2
-    },
-    "pizza": {
-      "keywords": [
-        "pizza",
-        "italian",
-        "cheese",
-        "tomato",
-        "dough",
-        "fast food"
-      ],
-      "calories": 285.0,
-      "protein": 12.0,
-      "carbs": 39.0,
-      "fat": 10.0
-    },
-    "burger": {
-      "keywords": [
-        "burger",
-        "hamburger",
-        "beef",
-        "sandwich",
-        "fast food",
-        "patty"
-      ],
-      "calories": 350.0,
-      "protein": 20.0,
-      "carbs": 33.0,
-      "fat": 15.0
-    },
-    "sandwich": {
-      "keywords": ["sandwich", "bread", "lunch", "sliced bread"],
-      "calories": 300.0,
-      "protein": 15.0,
-      "carbs": 35.0,
-      "fat": 10.0
-    },
-    "salad": {
-      "keywords": ["salad", "vegetables", "lettuce", "greens", "healthy"],
-      "calories": 150.0,
-      "protein": 3.0,
-      "carbs": 10.0,
-      "fat": 10.0
-    },
-    "pasta": {
-      "keywords": ["pasta", "noodle", "spaghetti", "italian", "carb"],
-      "calories": 200.0,
-      "protein": 7.0,
-      "carbs": 40.0,
-      "fat": 1.0
-    },
-    "rice": {
-      "keywords": ["rice", "grain", "white rice", "brown rice", "carb"],
-      "calories": 130.0,
-      "protein": 2.7,
-      "carbs": 28.0,
-      "fat": 0.3
-    },
-    "chicken": {
-      "keywords": ["chicken", "meat", "poultry", "protein", "grilled"],
-      "calories": 165.0,
-      "protein": 31.0,
-      "carbs": 0.0,
-      "fat": 3.6
-    },
-    "fish": {
-      "keywords": ["fish", "seafood", "protein", "salmon", "tuna"],
-      "calories": 180.0,
-      "protein": 25.0,
-      "carbs": 0.0,
-      "fat": 8.0
-    },
-    "steak": {
-      "keywords": ["steak", "beef", "meat", "protein", "red meat"],
-      "calories": 270.0,
-      "protein": 29.0,
-      "carbs": 0.0,
-      "fat": 17.0
-    },
-    "broccoli": {
-      "keywords": ["broccoli", "vegetable", "green", "healthy"],
-      "calories": 55.0,
-      "protein": 3.7,
-      "carbs": 11.2,
-      "fat": 0.6
-    },
-    "cake": {
-      "keywords": ["cake", "dessert", "sweet", "bakery", "birthday"],
-      "calories": 350.0,
-      "protein": 5.0,
-      "carbs": 50.0,
-      "fat": 15.0
-    },
-    "ice cream": {
-      "keywords": ["ice cream", "dessert", "frozen", "sweet", "dairy"],
-      "calories": 270.0,
-      "protein": 4.0,
-      "carbs": 30.0,
-      "fat": 15.0
-    },
-    "chocolate": {
-      "keywords": ["chocolate", "dessert", "sweet", "candy", "cocoa"],
-      "calories": 550.0,
-      "protein": 8.0,
-      "carbs": 55.0,
-      "fat": 32.0
-    }
-  };
 
   /// Analyze a food image and return recognition results
   /// Takes a [File] containing the food image
@@ -163,24 +41,43 @@ class FoodApiService {
     }
 
     try {
-      // Convert image file to base64
-      List<int> imageBytes = await imageFile.readAsBytes();
-      String base64Image = base64Encode(imageBytes);
+      // Resize and compress the image to reduce upload size
+      // Targeting 512x512 pixels which is sufficient for food recognition
+      List<int> compressedImageBytes = await _compressImage(imageFile);
+
+      // Convert compressed image to base64
+      String base64Image = base64Encode(compressedImageBytes);
+      String dataUri = 'data:image/jpeg;base64,$base64Image';
+
+      // Print size comparison for debugging
+      print('Original image size: ${imageFile.lengthSync()} bytes');
+      print('Compressed image size: ${compressedImageBytes.length} bytes');
+      print(
+          'Compression ratio: ${compressedImageBytes.length / imageFile.lengthSync() * 100}%');
 
       // Construct the API endpoint
-      var uri = Uri.https(baseUrl, imageAnalysisEndpoint);
+      var uri = Uri.https(baseUrl, visionEndpoint);
 
-      // Create request body for Google Vision API
+      // Create request body for OpenAI Vision API
       final requestBody = json.encode({
-        "requests": [
+        "model": visionModel,
+        "messages": [
           {
-            "image": {"content": base64Image},
-            "features": [
-              {"type": "LABEL_DETECTION", "maxResults": 15},
-              {"type": "OBJECT_LOCALIZATION", "maxResults": 5}
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text":
+                    "Identify this food and provide detailed nutritional information. Return the response in JSON format with the following structure: {\"name\": \"Food Name\", \"nutrition\": {\"calories\": 123, \"protein\": 12, \"carbs\": 34, \"fat\": 5}}. Be as accurate as possible with the nutritional values. Include only the JSON in your response."
+              },
+              {
+                "type": "image_url",
+                "image_url": {"url": dataUri}
+              }
             ]
           }
-        ]
+        ],
+        "max_tokens": 1000
       });
 
       // Send the request
@@ -188,8 +85,7 @@ class FoodApiService {
         uri,
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-Goog-Api-Key': apiKey,
+          'Authorization': 'Bearer $apiKey',
         },
         body: requestBody,
       );
@@ -202,16 +98,28 @@ class FoodApiService {
         final responseData = json.decode(response.body) as Map<String, dynamic>;
 
         // Print the response for debugging
-        print('Vision API Response: ${response.body}');
+        print('API Response: ${response.body}');
 
-        // Identify the food from the response
-        final identifiedFood = _identifyFoodFromResponse(responseData);
-        print('Identified food: ${identifiedFood['name']}');
+        // Extract the content from the OpenAI response
+        String content = responseData['choices'][0]['message']['content'];
 
-        // Format the response for our app
-        final result = _formatResponseForApp(identifiedFood);
+        // Try to extract JSON from the content (in case there's text around it)
+        RegExp jsonRegex = RegExp(r'{[\s\S]*}');
+        Match? match = jsonRegex.firstMatch(content);
 
-        return result;
+        String jsonContent = match != null ? match.group(0)! : content;
+
+        try {
+          // Parse the JSON content
+          Map<String, dynamic> foodData = json.decode(jsonContent);
+
+          // Format the response for our app
+          return _formatResponseForApp(foodData);
+        } catch (e) {
+          print('Error parsing JSON from OpenAI: $e');
+          // Try to extract food information from text response
+          return _extractFoodInfoFromText(content);
+        }
       } else {
         print('API error: ${response.body}');
         throw Exception(
@@ -223,166 +131,151 @@ class FoodApiService {
     }
   }
 
-  /// Identify food from the API response using all available labels
-  Map<String, dynamic> _identifyFoodFromResponse(
-      Map<String, dynamic> apiResponse) {
+  /// Compress and resize an image to reduce API upload costs
+  /// Provides a good balance between image quality and file size
+  Future<List<int>> _compressImage(File imageFile) async {
     try {
-      // Extract all label descriptions from the API response
-      final List<String> labels = [];
+      // Target dimensions for food recognition (512x512 is usually sufficient)
+      const targetWidth = 512;
+      const targetHeight = 512;
 
-      if (apiResponse.containsKey('responses') &&
-          apiResponse['responses'] is List &&
-          (apiResponse['responses'] as List).isNotEmpty) {
-        final responseList = apiResponse['responses'] as List;
-        if (responseList.isEmpty) {
-          return _getDefaultFood();
-        }
+      // Target quality (0-100, where 100 is highest quality)
+      // 85 is a good balance between quality and file size
+      const quality = 85;
 
-        final response = responseList[0];
-        if (response == null || response is! Map<String, dynamic>) {
-          return _getDefaultFood();
-        }
+      // Compress the image
+      final result = await FlutterImageCompress.compressWithFile(
+        imageFile.absolute.path,
+        minWidth: targetWidth,
+        minHeight: targetHeight,
+        quality: quality,
+      );
 
-        // Extract from label annotations
-        if (response.containsKey('labelAnnotations') &&
-            response['labelAnnotations'] is List) {
-          final labelAnnotations = response['labelAnnotations'] as List;
-
-          for (var item in labelAnnotations) {
-            if (item is Map<String, dynamic> &&
-                item.containsKey('description') &&
-                item['description'] != null) {
-              labels.add(item['description'].toString().toLowerCase());
-            }
-          }
-        }
-
-        // Extract from localized object annotations
-        if (response.containsKey('localizedObjectAnnotations') &&
-            response['localizedObjectAnnotations'] is List) {
-          final objectAnnotations =
-              response['localizedObjectAnnotations'] as List;
-
-          for (var item in objectAnnotations) {
-            if (item is Map<String, dynamic> &&
-                item.containsKey('name') &&
-                item['name'] != null) {
-              labels.add(item['name'].toString().toLowerCase());
-            }
-          }
-        }
-      }
-
-      print('Extracted labels: $labels');
-
-      // Match against food database using keywords
-      String bestMatchName = "Unknown Food";
-      int highestMatches = 0;
-      double highestScore = 0.0;
-
-      for (final entry in _foodDatabase.entries) {
-        final foodName = entry.key;
-        final foodInfo = entry.value;
-        final keywords = foodInfo['keywords'] as List<String>;
-
-        int matches = 0;
-        double matchScore = 0.0;
-
-        // Check each keyword against the labels
-        for (final keyword in keywords) {
-          for (final label in labels) {
-            // Exact match gets highest score
-            if (label == keyword) {
-              matches += 3;
-              matchScore += 3.0;
-            }
-            // Contains match gets medium score
-            else if (label.contains(keyword) || keyword.contains(label)) {
-              matches += 1;
-              matchScore += 1.0;
-            }
-          }
-        }
-
-        // Check if food name itself is in the labels with higher weight
-        for (final label in labels) {
-          if (label == foodName) {
-            matches += 4; // Exact match with food name is highest priority
-            matchScore += 4.0;
-          } else if (label.contains(foodName) || foodName.contains(label)) {
-            matches += 2; // Partial match with food name is medium priority
-            matchScore += 2.0;
-          }
-        }
-
-        // Consider label confidence scores if available (not implemented here but could be added)
-
-        // Debug: print match info
-        if (matches > 0) {
-          print('Food: $foodName, Matches: $matches, Score: $matchScore');
-        }
-
-        // Update best match if this one has higher score
-        if (matches > highestMatches ||
-            (matches == highestMatches && matchScore > highestScore)) {
-          highestMatches = matches;
-          highestScore = matchScore;
-          bestMatchName = foodName;
-        }
-      }
-
-      // Only return a match if we have at least some confidence
-      if (highestMatches == 0) {
-        return _getDefaultFood();
-      }
-
-      print(
-          'Best match: $bestMatchName with $highestMatches matches and score $highestScore');
-
-      // Return the matched food with its nutritional info
-      final matchedFood = _foodDatabase[bestMatchName]!;
-
-      return {
-        "name": bestMatchName.substring(0, 1).toUpperCase() +
-            bestMatchName.substring(1), // Capitalize first letter
-        "calories": matchedFood['calories'] as double,
-        "protein": matchedFood['protein'] as double,
-        "carbs": matchedFood['carbs'] as double,
-        "fat": matchedFood['fat'] as double
-      };
+      // Return the compressed image bytes or original if compression failed
+      return result ?? await imageFile.readAsBytes();
     } catch (e) {
-      print('Error identifying food: $e');
-      return _getDefaultFood();
+      print('Error compressing image: $e');
+      // Fallback to original image if compression fails
+      return await imageFile.readAsBytes();
     }
   }
 
-  /// Get default food values for unknown foods
-  Map<String, dynamic> _getDefaultFood() {
-    return {
-      "name": "Unknown Food",
-      "calories": 250.0,
-      "protein": 10.0,
-      "carbs": 30.0,
-      "fat": 12.0
-    };
-  }
+  /// Extract food information from text response when JSON parsing fails
+  Map<String, dynamic> _extractFoodInfoFromText(String text) {
+    // Default values
+    String name = 'Unknown Food';
+    double calories = 250.0;
+    double proteins = 10.0;
+    double carbs = 30.0;
+    double fats = 12.0;
 
-  /// Format the food data for our app
-  Map<String, dynamic> _formatResponseForApp(Map<String, dynamic> foodData) {
+    // Try to find food name
+    final nameMatch = RegExp(r'name["\s:]+([^",\n}]+)', caseSensitive: false)
+        .firstMatch(text);
+    if (nameMatch != null && nameMatch.group(1) != null) {
+      name = nameMatch.group(1)!.trim();
+    }
+
+    // Try to find calories
+    final caloriesMatch =
+        RegExp(r'calories["\s:]+(\d+\.?\d*)', caseSensitive: false)
+            .firstMatch(text);
+    if (caloriesMatch != null && caloriesMatch.group(1) != null) {
+      calories = double.tryParse(caloriesMatch.group(1)!) ?? calories;
+    }
+
+    // Try to find protein
+    final proteinMatch =
+        RegExp(r'protein["\s:]+(\d+\.?\d*)', caseSensitive: false)
+            .firstMatch(text);
+    if (proteinMatch != null && proteinMatch.group(1) != null) {
+      proteins = double.tryParse(proteinMatch.group(1)!) ?? proteins;
+    }
+
+    // Try to find carbs
+    final carbsMatch = RegExp(r'carbs["\s:]+(\d+\.?\d*)', caseSensitive: false)
+        .firstMatch(text);
+    if (carbsMatch != null && carbsMatch.group(1) != null) {
+      carbs = double.tryParse(carbsMatch.group(1)!) ?? carbs;
+    }
+
+    // Try to find fat
+    final fatMatch =
+        RegExp(r'fat["\s:]+(\d+\.?\d*)', caseSensitive: false).firstMatch(text);
+    if (fatMatch != null && fatMatch.group(1) != null) {
+      fats = double.tryParse(fatMatch.group(1)!) ?? fats;
+    }
+
+    // Format the response for our app
     return {
-      'category': {'name': foodData['name']},
+      'category': {'name': name},
       'nutrition': {
-        'calories': foodData['calories'],
-        'protein': foodData['protein'],
-        'carbs': foodData['carbs'],
-        'fat': foodData['fat'],
+        'calories': calories,
+        'protein': proteins,
+        'carbs': carbs,
+        'fat': fats,
         'nutrients': [
-          {'name': 'Protein', 'amount': foodData['protein'], 'unit': 'g'},
-          {'name': 'Carbohydrates', 'amount': foodData['carbs'], 'unit': 'g'},
-          {'name': 'Fat', 'amount': foodData['fat'], 'unit': 'g'},
+          {'name': 'Protein', 'amount': proteins, 'unit': 'g'},
+          {'name': 'Carbohydrates', 'amount': carbs, 'unit': 'g'},
+          {'name': 'Fat', 'amount': fats, 'unit': 'g'},
         ]
       }
     };
+  }
+
+  /// Format the API response into the structure our app expects
+  Map<String, dynamic> _formatResponseForApp(Map<String, dynamic> foodData) {
+    try {
+      String name = foodData['name'] ?? 'Unknown Food';
+
+      // Extract nutrition information
+      Map<String, dynamic> nutrition = foodData['nutrition'] ?? {};
+      double calories = (nutrition['calories'] is num)
+          ? (nutrition['calories'] as num).toDouble()
+          : 250.0;
+      double proteins = (nutrition['protein'] is num)
+          ? (nutrition['protein'] as num).toDouble()
+          : 10.0;
+      double carbs = (nutrition['carbs'] is num)
+          ? (nutrition['carbs'] as num).toDouble()
+          : 30.0;
+      double fats = (nutrition['fat'] is num)
+          ? (nutrition['fat'] as num).toDouble()
+          : 12.0;
+
+      // Return formatted response
+      return {
+        'category': {'name': name},
+        'nutrition': {
+          'calories': calories,
+          'protein': proteins,
+          'carbs': carbs,
+          'fat': fats,
+          'nutrients': [
+            {'name': 'Protein', 'amount': proteins, 'unit': 'g'},
+            {'name': 'Carbohydrates', 'amount': carbs, 'unit': 'g'},
+            {'name': 'Fat', 'amount': fats, 'unit': 'g'},
+          ]
+        }
+      };
+    } catch (e) {
+      print('Error formatting API response: $e');
+      // Return default values if parsing fails
+      return {
+        'category': {'name': 'Unknown Food'},
+        'nutrition': {
+          'calories': 250.0,
+          'protein': 10.0,
+          'carbs': 30.0,
+          'fat': 12.0,
+          'nutrients': [
+            {'name': 'Protein', 'amount': 10.0, 'unit': 'g'},
+            {'name': 'Carbohydrates', 'amount': 30.0, 'unit': 'g'},
+            {'name': 'Fat', 'amount': 12.0, 'unit': 'g'},
+          ]
+        }
+      };
+    }
   }
 
   /// Get detailed information about a specific food ingredient by name
@@ -394,74 +287,88 @@ class FoodApiService {
       throw Exception('Daily API quota exceeded. Please try again tomorrow.');
     }
 
-    await incrementQuotaUsage();
+    try {
+      // Construct the API endpoint
+      var uri = Uri.https(baseUrl, chatEndpoint);
 
-    // Find the food in our database (case-insensitive)
-    final lowerName = name.toLowerCase();
-    String matchedFood = "Unknown Food";
+      // Create request body for OpenAI chat API
+      final requestBody = json.encode({
+        "model": textModel,
+        "messages": [
+          {
+            "role": "system",
+            "content":
+                "You are a nutrition information system. When given a food name, provide accurate nutritional information. Return ONLY JSON with no additional text."
+          },
+          {
+            "role": "user",
+            "content":
+                "Provide detailed nutritional information for $name. Return the response in JSON format with the following structure: {\"name\": \"$name\", \"nutrition\": {\"calories\": 123, \"protein\": 12, \"carbs\": 34, \"fat\": 5}}. Be as accurate as possible with the nutritional values."
+          }
+        ],
+        "max_tokens": 500
+      });
 
-    // Try exact match first
-    for (final foodName in _foodDatabase.keys) {
-      if (foodName.toLowerCase() == lowerName) {
-        matchedFood = foodName;
-        break;
-      }
-    }
+      // Send the request
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $apiKey',
+        },
+        body: requestBody,
+      );
 
-    // If no exact match, try partial match
-    if (matchedFood == "Unknown Food") {
-      for (final foodName in _foodDatabase.keys) {
-        if (foodName.toLowerCase().contains(lowerName) ||
-            lowerName.contains(foodName.toLowerCase())) {
-          matchedFood = foodName;
-          break;
+      // Increment quota usage
+      await incrementQuotaUsage();
+
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body) as Map<String, dynamic>;
+
+        // Extract the content from the OpenAI response
+        String content = responseData['choices'][0]['message']['content'];
+
+        // Try to extract JSON from the content (in case there's text around it)
+        RegExp jsonRegex = RegExp(r'{[\s\S]*}');
+        Match? match = jsonRegex.firstMatch(content);
+
+        String jsonContent = match != null ? match.group(0)! : content;
+
+        try {
+          // Parse the JSON content
+          Map<String, dynamic> foodData = json.decode(jsonContent);
+
+          // Format the response for our app
+          return _formatResponseForApp(foodData);
+        } catch (e) {
+          print('Error parsing JSON from OpenAI: $e');
+          // Try to extract food information from text response
+          return _extractFoodInfoFromText(content);
         }
+      } else {
+        print('API error: ${response.body}');
+        throw Exception(
+            'Failed to get food information: ${response.statusCode}, ${response.body}');
       }
-    }
+    } catch (e) {
+      print('Error getting food information: $e');
 
-    // Get nutrition data
-    final Map<String, dynamic> nutritionData;
-    if (matchedFood != "Unknown Food") {
-      nutritionData = {
-        'calories': _foodDatabase[matchedFood]!['calories'],
-        'protein': _foodDatabase[matchedFood]!['protein'],
-        'carbs': _foodDatabase[matchedFood]!['carbs'],
-        'fat': _foodDatabase[matchedFood]!['fat'],
-        'nutrients': [
-          {
-            'name': 'Protein',
-            'amount': _foodDatabase[matchedFood]!['protein'],
-            'unit': 'g'
-          },
-          {
-            'name': 'Carbohydrates',
-            'amount': _foodDatabase[matchedFood]!['carbs'],
-            'unit': 'g'
-          },
-          {
-            'name': 'Fat',
-            'amount': _foodDatabase[matchedFood]!['fat'],
-            'unit': 'g'
-          },
-        ]
-      };
-    } else {
-      // Default values for unknown foods
-      nutritionData = {
-        'calories': 250.0,
-        'protein': 10.0,
-        'carbs': 30.0,
-        'fat': 12.0,
-        'nutrients': [
-          {'name': 'Protein', 'amount': 10.0, 'unit': 'g'},
-          {'name': 'Carbohydrates', 'amount': 30.0, 'unit': 'g'},
-          {'name': 'Fat', 'amount': 12.0, 'unit': 'g'},
-        ]
+      // Return default values with the food name
+      return {
+        'name': name,
+        'nutrition': {
+          'calories': 250.0,
+          'protein': 10.0,
+          'carbs': 30.0,
+          'fat': 12.0,
+          'nutrients': [
+            {'name': 'Protein', 'amount': 10.0, 'unit': 'g'},
+            {'name': 'Carbohydrates', 'amount': 30.0, 'unit': 'g'},
+            {'name': 'Fat', 'amount': 12.0, 'unit': 'g'},
+          ]
+        }
       };
     }
-
-    // Format the response for our app
-    return {'name': name, 'nutrition': nutritionData};
   }
 
   /// Search for foods by name
@@ -473,111 +380,94 @@ class FoodApiService {
       throw Exception('Daily API quota exceeded. Please try again tomorrow.');
     }
 
-    await incrementQuotaUsage();
+    try {
+      // Construct the API endpoint
+      var uri = Uri.https(baseUrl, chatEndpoint);
 
-    // Search our food database
-    final lowerQuery = query.toLowerCase();
-    final results = <Map<String, dynamic>>[];
-
-    // Find foods that match the query
-    for (final foodName in _foodDatabase.keys) {
-      if (foodName.toLowerCase().contains(lowerQuery)) {
-        final foodInfo = _foodDatabase[foodName]!;
-
-        results.add({
-          'id': _foodDatabase.keys.toList().indexOf(foodName) + 1,
-          'name': foodName.substring(0, 1).toUpperCase() +
-              foodName.substring(1), // Capitalize
-          'nutrition': {
-            'calories': foodInfo['calories'],
-            'protein': foodInfo['protein'],
-            'carbs': foodInfo['carbs'],
-            'fat': foodInfo['fat'],
-            'nutrients': [
-              {'name': 'Protein', 'amount': foodInfo['protein'], 'unit': 'g'},
-              {
-                'name': 'Carbohydrates',
-                'amount': foodInfo['carbs'],
-                'unit': 'g'
-              },
-              {'name': 'Fat', 'amount': foodInfo['fat'], 'unit': 'g'},
-            ]
+      // Create request body for OpenAI chat API
+      final requestBody = json.encode({
+        "model": textModel,
+        "messages": [
+          {
+            "role": "system",
+            "content":
+                "You are a food database API. Return JSON only, with no explanatory text."
+          },
+          {
+            "role": "user",
+            "content":
+                "Provide a list of 5 food items that match the search term: '$query'. Return the response as a JSON array of objects with the following structure: [{\"id\": 1, \"name\": \"Food Name\", \"nutrition\": {\"calories\": 123, \"protein\": 12, \"carbs\": 34, \"fat\": 5}}]"
           }
-        });
-      }
-    }
+        ],
+        "max_tokens": 1000
+      });
 
-    // Also check keywords for better matches
-    if (results.length < 5) {
-      for (final entry in _foodDatabase.entries) {
-        // Skip if already added
-        if (results.any(
-            (result) => result['name'].toString().toLowerCase() == entry.key)) {
-          continue;
-        }
+      // Send the request
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $apiKey',
+        },
+        body: requestBody,
+      );
 
-        // Check keywords
-        final keywords = entry.value['keywords'] as List<String>;
-        if (keywords.any((keyword) =>
-            keyword.contains(lowerQuery) || lowerQuery.contains(keyword))) {
-          final foodInfo = entry.value;
+      // Increment quota usage
+      await incrementQuotaUsage();
 
-          results.add({
-            'id': _foodDatabase.keys.toList().indexOf(entry.key) + 1,
-            'name': entry.key.substring(0, 1).toUpperCase() +
-                entry.key.substring(1), // Capitalize
-            'nutrition': {
-              'calories': foodInfo['calories'],
-              'protein': foodInfo['protein'],
-              'carbs': foodInfo['carbs'],
-              'fat': foodInfo['fat'],
-              'nutrients': [
-                {'name': 'Protein', 'amount': foodInfo['protein'], 'unit': 'g'},
-                {
-                  'name': 'Carbohydrates',
-                  'amount': foodInfo['carbs'],
-                  'unit': 'g'
-                },
-                {'name': 'Fat', 'amount': foodInfo['fat'], 'unit': 'g'},
-              ]
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body) as Map<String, dynamic>;
+
+        // Extract the content from the OpenAI response
+        String content = responseData['choices'][0]['message']['content'];
+
+        // Try to extract JSON from the content (in case there's text around it)
+        RegExp jsonRegex = RegExp(r'\[[\s\S]*\]');
+        Match? match = jsonRegex.firstMatch(content);
+
+        String jsonContent = match != null ? match.group(0)! : content;
+
+        try {
+          // Parse the JSON content
+          List<dynamic> foodItems = json.decode(jsonContent);
+          return foodItems;
+        } catch (e) {
+          print('Error parsing JSON from OpenAI search results: $e');
+          // Create a fallback result with the query term
+          return [
+            {
+              'id': 1,
+              'name': query,
+              'nutrition': {
+                'calories': 250.0,
+                'protein': 10.0,
+                'carbs': 30.0,
+                'fat': 12.0
+              }
             }
-          });
+          ];
         }
+      } else {
+        print('API error: ${response.body}');
+        throw Exception(
+            'Failed to search foods: ${response.statusCode}, ${response.body}');
       }
-    }
-
-    // If no matches, return top 3 popular foods as suggestions
-    if (results.isEmpty) {
-      final popularFoods = ['apple', 'banana', 'chicken', 'pizza', 'rice'];
-
-      for (var i = 0; i < 3; i++) {
-        final food = popularFoods[i];
-        final foodInfo = _foodDatabase[food]!;
-
-        results.add({
-          'id': i + 1,
-          'name':
-              '${food.substring(0, 1).toUpperCase() + food.substring(1)} (suggested)',
+    } catch (e) {
+      print('Error searching foods: $e');
+      // Create a fallback result with the query term
+      return [
+        {
+          'id': 1,
+          'name': query,
           'nutrition': {
-            'calories': foodInfo['calories'],
-            'protein': foodInfo['protein'],
-            'carbs': foodInfo['carbs'],
-            'fat': foodInfo['fat'],
-            'nutrients': [
-              {'name': 'Protein', 'amount': foodInfo['protein'], 'unit': 'g'},
-              {
-                'name': 'Carbohydrates',
-                'amount': foodInfo['carbs'],
-                'unit': 'g'
-              },
-              {'name': 'Fat', 'amount': foodInfo['fat'], 'unit': 'g'},
-            ]
+            'calories': 250.0,
+            'protein': 10.0,
+            'carbs': 30.0,
+            'fat': 12.0
           }
-        });
-      }
+        }
+      ];
     }
-
-    return results;
   }
 
   /// Check if we've exceeded our self-imposed daily quota limit
