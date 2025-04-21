@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../config/theme.dart';
 import '../../data/models/food_item.dart';
 import '../../data/repositories/food_repository.dart';
-import '../food/food_item_card.dart'; // Make sure to import FoodItemCard
 
 class FoodLogWidget extends StatefulWidget {
   final DateTime date;
@@ -170,7 +169,7 @@ class _FoodLogWidgetState extends State<FoodLogWidget> {
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
-                    'No food logged for today. Use the camera button or Add Food to log your meals.',
+                    'No food logged for today. Use the camera button to log your meals.',
                     style: TextStyle(color: Colors.grey),
                   ),
                 ),
@@ -286,20 +285,7 @@ class _FoodLogWidgetState extends State<FoodLogWidget> {
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Use FoodItemCard with delete functionality instead of the custom tile
-                  ...mealItems.map((item) => Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8.0, vertical: 4.0),
-                        child: FoodItemCard(
-                          foodItem: item,
-                          onTap: () {
-                            // TODO: Add food item detail view or edit
-                          },
-                          onDelete: () => _showDeleteConfirmation(item),
-                        ),
-                      )),
-
+                  ...mealItems.map((item) => _buildFoodItemTile(item)),
                   const SizedBox(height: 8),
                 ],
               ),
@@ -380,6 +366,45 @@ class _FoodLogWidgetState extends State<FoodLogWidget> {
     );
   }
 
+  Widget _buildFoodItemTile(FoodItem item) {
+    // Calculate calories for this item with serving size
+    final itemCalories = (item.calories * item.servingSize).round();
+
+    // Calculate nutrient values with serving size - updated to remove decimal places
+    final protein = (item.proteins * item.servingSize).round();
+    final carbs = (item.carbs * item.servingSize).round();
+    final fat = (item.fats * item.servingSize).round();
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      title: Text(
+        item.name,
+        style: const TextStyle(
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      subtitle: Text(
+        'P: ${protein}g • C: ${carbs}g • F: ${fat}g • ${item.servingSize} ${item.servingUnit}',
+        style: const TextStyle(
+          fontSize: 12,
+        ),
+      ),
+      trailing: Text(
+        '$itemCalories cal',
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 16,
+        ),
+      ),
+      onTap: () {
+        // TODO: Add food item detail view or edit
+      },
+      onLongPress: () {
+        _showDeleteConfirmation(item);
+      },
+    );
+  }
+
   void _showDeleteConfirmation(FoodItem item) {
     showDialog(
       context: context,
@@ -408,18 +433,6 @@ class _FoodLogWidgetState extends State<FoodLogWidget> {
                 // Notify the parent widget if needed
                 if (widget.onFoodAdded != null) {
                   widget.onFoodAdded!();
-                }
-
-                // Show a confirmation message
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('${item.name} removed from your food log'),
-                      behavior: SnackBarBehavior.floating,
-                      backgroundColor: Colors.green,
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
                 }
               }
             },

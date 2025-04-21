@@ -251,6 +251,7 @@ class FoodItem {
 
   /// Get formatted string representation of calories (with serving size applied)
   String getFormattedCalories() {
+    // Updated to remove decimal places
     return '${(calories * servingSize).round()} cal';
   }
 

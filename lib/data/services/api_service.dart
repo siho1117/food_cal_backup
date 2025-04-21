@@ -9,7 +9,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart'; // Re-add dotenv for enviro
 /// Service to interact with the Food API for food recognition
 class FoodApiService {
   // Get API key from .env file
-  String get apiKey => dotenv.env['OPENAI_API_KEY'] ?? '';
+  String get apiKey => dotenv.env['API_KEY'] ?? '';
 
   // Model names
   final String visionModel = 'gpt-4.1-mini'; // Vision model

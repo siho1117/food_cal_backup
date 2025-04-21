@@ -23,9 +23,10 @@ class FoodItemCard extends StatelessWidget {
 
     // Extract values and log them for debugging
     final calories = nutritionValues['calories']!.round();
-    final protein = nutritionValues['proteins']!.toStringAsFixed(1);
-    final carbs = nutritionValues['carbs']!.toStringAsFixed(1);
-    final fat = nutritionValues['fats']!.toStringAsFixed(1);
+    // Updated to remove decimal places for macronutrients
+    final protein = nutritionValues['proteins']!.round().toString();
+    final carbs = nutritionValues['carbs']!.round().toString();
+    final fat = nutritionValues['fats']!.round().toString();
 
     // Print for debugging
     print(

@@ -66,13 +66,13 @@ class _FoodEntryFormState extends State<FoodEntryForm> {
       _nameController =
           TextEditingController(text: widget.initialFoodItem!.name);
       _caloriesController = TextEditingController(
-          text: widget.initialFoodItem!.calories.toString());
+          text: widget.initialFoodItem!.calories.round().toString());
       _proteinsController = TextEditingController(
-          text: widget.initialFoodItem!.proteins.toString());
-      _carbsController =
-          TextEditingController(text: widget.initialFoodItem!.carbs.toString());
-      _fatsController =
-          TextEditingController(text: widget.initialFoodItem!.fats.toString());
+          text: widget.initialFoodItem!.proteins.round().toString());
+      _carbsController = TextEditingController(
+          text: widget.initialFoodItem!.carbs.round().toString());
+      _fatsController = TextEditingController(
+          text: widget.initialFoodItem!.fats.round().toString());
       _servingSizeController = TextEditingController(
           text: widget.initialFoodItem!.servingSize.toString());
       _servingUnit = widget.initialFoodItem!.servingUnit;
@@ -333,7 +333,7 @@ class _FoodEntryFormState extends State<FoodEntryForm> {
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
                       ],
                       validator: (value) {
                         if (value == null || value.isEmpty) {
@@ -366,7 +366,7 @@ class _FoodEntryFormState extends State<FoodEntryForm> {
                                 decimal: true),
                             inputFormatters: [
                               FilteringTextInputFormatter.allow(
-                                  RegExp(r'[0-9.]')),
+                                  RegExp(r'[0-9]')),
                             ],
                             validator: (value) {
                               if (value == null || value.isEmpty) {
@@ -397,7 +397,7 @@ class _FoodEntryFormState extends State<FoodEntryForm> {
                                 decimal: true),
                             inputFormatters: [
                               FilteringTextInputFormatter.allow(
-                                  RegExp(r'[0-9.]')),
+                                  RegExp(r'[0-9]')),
                             ],
                             validator: (value) {
                               if (value == null || value.isEmpty) {
@@ -428,7 +428,7 @@ class _FoodEntryFormState extends State<FoodEntryForm> {
                                 decimal: true),
                             inputFormatters: [
                               FilteringTextInputFormatter.allow(
-                                  RegExp(r'[0-9.]')),
+                                  RegExp(r'[0-9]')),
                             ],
                             validator: (value) {
                               if (value == null || value.isEmpty) {

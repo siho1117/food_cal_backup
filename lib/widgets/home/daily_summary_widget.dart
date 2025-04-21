@@ -172,10 +172,11 @@ class _DailySummaryWidgetState extends State<DailySummaryWidget> {
 
   // Calculate calorie macro breakdown in grams
   Map<String, String> _calculateMacroGrams() {
+    // Updated to remove decimal places
     return {
-      'protein': _macros['protein']!.toStringAsFixed(1),
-      'carbs': _macros['carbs']!.toStringAsFixed(1),
-      'fat': _macros['fat']!.toStringAsFixed(1),
+      'protein': _macros['protein']!.round().toString(),
+      'carbs': _macros['carbs']!.round().toString(),
+      'fat': _macros['fat']!.round().toString(),
     };
   }
 
