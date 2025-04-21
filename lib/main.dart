@@ -15,8 +15,12 @@ Future<void> main() async {
   // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load .env file
+  // Load .env file with wait to ensure it's loaded before app starts
   await dotenv.load();
+
+  // Print environment variables for debugging (remove in production)
+  print('API_KEY: ${dotenv.env['API_KEY']?.substring(0, 3)}...');
+  print('PROXY_URL: ${dotenv.env['PROXY_URL']}');
 
   // Run the app
   runApp(const MyApp());
