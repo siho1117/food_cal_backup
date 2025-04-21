@@ -2,34 +2,55 @@
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart'; // Re-add dotenv for environment variables
+import 'fallback_provider.dart';
 
-/// Service to interact with the Food API for food recognition
+/// Service to interact with OpenAI API for food recognition with Google Vision API fallback
 class FoodApiService {
-  // Get API key from .env file
-  String get apiKey => dotenv.env['API_KEY'] ?? '';
+  // Singleton instance
+  static final FoodApiService _instance = FoodApiService._internal();
+  factory FoodApiService() => _instance;
+  FoodApiService._internal() {
+    _fallbackProvider = FallbackProvider();
+  }
 
-  // Model names
-  final String visionModel = 'gpt-4.1-mini'; // Vision model
-  final String textModel = 'gpt-4.1-nano'; // Text model
+  // OpenAI configuration
+  final String _openAIBaseUrl = 'api.openai.com';
+  final String _openAIImagesEndpoint = '/v1/chat/completions';
+  late FallbackProvider _fallbackProvider;
 
-  // Base URL for OpenAI API calls
-  final String baseUrl = 'api.openai.com';
+  // OpenAI model names
+  final String _visionModel = 'gpt-4.1-mini';
+  final String _textModel = 'gpt-4.1-nano';
 
-  // Endpoint for OpenAI Vision API
-  final String visionEndpoint = '/v1/chat/completions';
-
-  // Endpoint for OpenAI Chat API
-  final String chatEndpoint = '/v1/chat/completions';
-
-  // Daily quota limit - easy to change as needed
-  final int dailyQuotaLimit = 150;
-
-  // Keys for storing quota usage in SharedPreferences
+  // Keys for storage
+  static const String _errorLogKey = 'api_error_log';
   static const String _quotaUsedKey = 'food_api_quota_used';
   static const String _quotaDateKey = 'food_api_quota_date';
+
+  // Daily quota limit
+  final int dailyQuotaLimit = 150;
+
+  // Get OpenAI API key from environment variables
+  String get _openAIApiKey {
+    final key = dotenv.env['OPENAI_API_KEY'];
+    if (key == null || key.isEmpty) {
+      print('WARNING: OPENAI_API_KEY not found in .env file');
+      return '';
+    }
+    return key;
+  }
+
+  // Get Google Vision API key from environment variables
+  String get _googleApiKey {
+    final key = dotenv.env['GOOGLE_API_KEY'] ?? dotenv.env['API_KEY'];
+    if (key == null || key.isEmpty) {
+      print('WARNING: Google API key not found in .env file');
+      return '';
+    }
+    return key;
+  }
 
   /// Analyze a food image and return recognition results
   /// Takes a [File] containing the food image
@@ -40,233 +61,155 @@ class FoodApiService {
       throw Exception('Daily API quota exceeded. Please try again tomorrow.');
     }
 
-    // Check if API key is available
-    if (apiKey.isEmpty) {
-      throw Exception(
-          'OpenAI API key is missing. Please check your .env file.');
-    }
-
     try {
-      // Resize and compress the image to reduce upload size
-      // Targeting 512x512 pixels which is sufficient for food recognition
-      List<int> compressedImageBytes = await _compressImage(imageFile);
+      // Try OpenAI first
+      return await _analyzeWithOpenAI(imageFile);
+    } catch (e) {
+      // Log the error for analytics
+      await _logError('OpenAI', e.toString());
+      print('OpenAI error, falling back to Google Vision: $e');
 
-      // Convert compressed image to base64
-      String base64Image = base64Encode(compressedImageBytes);
-      String dataUri = 'data:image/jpeg;base64,$base64Image';
-
-      // Print size comparison for debugging
-      print('Original image size: ${imageFile.lengthSync()} bytes');
-      print('Compressed image size: ${compressedImageBytes.length} bytes');
-      print(
-          'Compression ratio: ${compressedImageBytes.length / imageFile.lengthSync() * 100}%');
-
-      // Construct the API endpoint
-      var uri = Uri.https(baseUrl, visionEndpoint);
-
-      // Create request body for OpenAI Vision API
-      final requestBody = json.encode({
-        "model": visionModel,
-        "messages": [
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text":
-                    "Identify this food and provide detailed nutritional information. Return the response in JSON format with the following structure: {\"name\": \"Food Name\", \"nutrition\": {\"calories\": 123, \"protein\": 12, \"carbs\": 34, \"fat\": 5}}. Be as accurate as possible with the nutritional values. Include only the JSON in your response."
-              },
-              {
-                "type": "image_url",
-                "image_url": {"url": dataUri}
-              }
-            ]
-          }
-        ],
-        "max_tokens": 1000
-      });
-
-      // Send the request
-      final response = await http.post(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiKey',
-        },
-        body: requestBody,
-      );
-
-      // Increment our quota usage counter
+      // Fall back to Google Vision
+      return await _fallbackProvider.analyzeImage(
+          imageFile, _googleApiKey, _visionModel);
+    } finally {
+      // Increment quota usage regardless of which service was used
       await incrementQuotaUsage();
+    }
+  }
 
-      // Process response
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body) as Map<String, dynamic>;
+  /// Analyze food image using OpenAI's API directly
+  Future<Map<String, dynamic>> _analyzeWithOpenAI(File imageFile) async {
+    // Convert image to base64
+    final bytes = await imageFile.readAsBytes();
+    final base64Image = base64Encode(bytes);
 
-        // Print the response for debugging
-        print('API Response: ${response.body}');
-
-        // Extract the content from the OpenAI response
-        String content = responseData['choices'][0]['message']['content'];
-
-        // Try to extract JSON from the content (in case there's text around it)
-        RegExp jsonRegex = RegExp(r'{[\s\S]*}');
-        Match? match = jsonRegex.firstMatch(content);
-
-        String jsonContent = match != null ? match.group(0)! : content;
-
-        try {
-          // Parse the JSON content
-          Map<String, dynamic> foodData = json.decode(jsonContent);
-
-          // Format the response for our app
-          return _formatResponseForApp(foodData);
-        } catch (e) {
-          print('Error parsing JSON from OpenAI: $e');
-          // Try to extract food information from text response
-          return _extractFoodInfoFromText(content);
+    // Create OpenAI API request body
+    final requestBody = {
+      "model": _visionModel,
+      "messages": [
+        {
+          "role": "system",
+          "content":
+              "You are a food recognition system. Identify the food item in the image and provide nutritional information."
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text":
+                  "What food is in this image? Please provide the name and nutritional information including calories, protein, carbs, and fat."
+            },
+            {
+              "type": "image_url",
+              "image_url": {"url": "data:image/jpeg;base64,$base64Image"}
+            }
+          ]
         }
-      } else {
-        print('API error: ${response.body}');
-        throw Exception(
-            'Failed to analyze image: ${response.statusCode}, ${response.body}');
-      }
-    } catch (e) {
-      print('Error sending image to API: $e');
-      rethrow;
-    }
-  }
-
-  /// Compress and resize an image to reduce API upload costs
-  /// Provides a good balance between image quality and file size
-  Future<List<int>> _compressImage(File imageFile) async {
-    try {
-      // Target dimensions for food recognition (512x512 is usually sufficient)
-      const targetWidth = 512;
-      const targetHeight = 512;
-
-      // Target quality (0-100, where 100 is highest quality)
-      // 85 is a good balance between quality and file size
-      const quality = 85;
-
-      // Compress the image
-      final result = await FlutterImageCompress.compressWithFile(
-        imageFile.absolute.path,
-        minWidth: targetWidth,
-        minHeight: targetHeight,
-        quality: quality,
-      );
-
-      // Return the compressed image bytes or original if compression failed
-      return result ?? await imageFile.readAsBytes();
-    } catch (e) {
-      print('Error compressing image: $e');
-      // Fallback to original image if compression fails
-      return await imageFile.readAsBytes();
-    }
-  }
-
-  /// Extract food information from text response when JSON parsing fails
-  Map<String, dynamic> _extractFoodInfoFromText(String text) {
-    // Default values
-    String name = 'Unknown Food';
-    double calories = 250.0;
-    double proteins = 10.0;
-    double carbs = 30.0;
-    double fats = 12.0;
-
-    // Try to find food name
-    final nameMatch = RegExp(r'name["\s:]+([^",\n}]+)', caseSensitive: false)
-        .firstMatch(text);
-    if (nameMatch != null && nameMatch.group(1) != null) {
-      name = nameMatch.group(1)!.trim();
-    }
-
-    // Try to find calories
-    final caloriesMatch =
-        RegExp(r'calories["\s:]+(\d+\.?\d*)', caseSensitive: false)
-            .firstMatch(text);
-    if (caloriesMatch != null && caloriesMatch.group(1) != null) {
-      calories = double.tryParse(caloriesMatch.group(1)!) ?? calories;
-    }
-
-    // Try to find protein
-    final proteinMatch =
-        RegExp(r'protein["\s:]+(\d+\.?\d*)', caseSensitive: false)
-            .firstMatch(text);
-    if (proteinMatch != null && proteinMatch.group(1) != null) {
-      proteins = double.tryParse(proteinMatch.group(1)!) ?? proteins;
-    }
-
-    // Try to find carbs
-    final carbsMatch = RegExp(r'carbs["\s:]+(\d+\.?\d*)', caseSensitive: false)
-        .firstMatch(text);
-    if (carbsMatch != null && carbsMatch.group(1) != null) {
-      carbs = double.tryParse(carbsMatch.group(1)!) ?? carbs;
-    }
-
-    // Try to find fat
-    final fatMatch =
-        RegExp(r'fat["\s:]+(\d+\.?\d*)', caseSensitive: false).firstMatch(text);
-    if (fatMatch != null && fatMatch.group(1) != null) {
-      fats = double.tryParse(fatMatch.group(1)!) ?? fats;
-    }
-
-    // Format the response for our app
-    return {
-      'category': {'name': name},
-      'nutrition': {
-        'calories': calories,
-        'protein': proteins,
-        'carbs': carbs,
-        'fat': fats,
-        'nutrients': [
-          {'name': 'Protein', 'amount': proteins, 'unit': 'g'},
-          {'name': 'Carbohydrates', 'amount': carbs, 'unit': 'g'},
-          {'name': 'Fat', 'amount': fats, 'unit': 'g'},
-        ]
-      }
+      ],
+      "max_tokens": 300
     };
+
+    // Send request to OpenAI
+    final uri = Uri.https(_openAIBaseUrl, _openAIImagesEndpoint);
+    final response = await http
+        .post(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $_openAIApiKey',
+          },
+          body: jsonEncode(requestBody),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'OpenAI API error: ${response.statusCode}, ${response.body}');
+    }
+
+    // Parse OpenAI response
+    final responseData = jsonDecode(response.body);
+    print('OpenAI Response: $responseData');
+
+    // Extract food information from OpenAI response
+    return _extractFoodInfoFromOpenAI(responseData);
   }
 
-  /// Format the API response into the structure our app expects
-  Map<String, dynamic> _formatResponseForApp(Map<String, dynamic> foodData) {
+  /// Extract food information from OpenAI response
+  Map<String, dynamic> _extractFoodInfoFromOpenAI(
+      Map<String, dynamic> response) {
     try {
-      String name = foodData['name'] ?? 'Unknown Food';
+      // Get the content from the response
+      final content = response['choices'][0]['message']['content'] as String;
 
-      // Extract nutrition information
-      Map<String, dynamic> nutrition = foodData['nutrition'] ?? {};
-      double calories = (nutrition['calories'] is num)
-          ? (nutrition['calories'] as num).toDouble()
-          : 250.0;
-      double proteins = (nutrition['protein'] is num)
-          ? (nutrition['protein'] as num).toDouble()
-          : 10.0;
-      double carbs = (nutrition['carbs'] is num)
-          ? (nutrition['carbs'] as num).toDouble()
-          : 30.0;
-      double fats = (nutrition['fat'] is num)
-          ? (nutrition['fat'] as num).toDouble()
-          : 12.0;
+      // Use a basic parsing approach to extract information
+      // In a real implementation, you might want to use more robust parsing
+      String name = 'Unknown Food';
+      double calories = 0.0;
+      double protein = 0.0;
+      double carbs = 0.0;
+      double fat = 0.0;
 
-      // Return formatted response
+      // Extract food name (usually the first line or after "Food:" or similar)
+      final nameMatches =
+          RegExp(r'(?:Food|Name)[:\s]+([^\n\.]+)', caseSensitive: false)
+              .firstMatch(content);
+      if (nameMatches != null && nameMatches.groupCount >= 1) {
+        name = nameMatches.group(1)!.trim();
+      }
+
+      // Extract calories
+      final caloriesMatches =
+          RegExp(r'(?:Calories|Cal)[:\s]+(\d+\.?\d*)', caseSensitive: false)
+              .firstMatch(content);
+      if (caloriesMatches != null && caloriesMatches.groupCount >= 1) {
+        calories = double.tryParse(caloriesMatches.group(1)!) ?? 0.0;
+      }
+
+      // Extract protein
+      final proteinMatches =
+          RegExp(r'(?:Protein)[:\s]+(\d+\.?\d*)', caseSensitive: false)
+              .firstMatch(content);
+      if (proteinMatches != null && proteinMatches.groupCount >= 1) {
+        protein = double.tryParse(proteinMatches.group(1)!) ?? 0.0;
+      }
+
+      // Extract carbs
+      final carbsMatches = RegExp(r'(?:Carbs|Carbohydrates)[:\s]+(\d+\.?\d*)',
+              caseSensitive: false)
+          .firstMatch(content);
+      if (carbsMatches != null && carbsMatches.groupCount >= 1) {
+        carbs = double.tryParse(carbsMatches.group(1)!) ?? 0.0;
+      }
+
+      // Extract fat
+      final fatMatches =
+          RegExp(r'(?:Fat)[:\s]+(\d+\.?\d*)', caseSensitive: false)
+              .firstMatch(content);
+      if (fatMatches != null && fatMatches.groupCount >= 1) {
+        fat = double.tryParse(fatMatches.group(1)!) ?? 0.0;
+      }
+
+      // Format the response for our app
       return {
         'category': {'name': name},
         'nutrition': {
           'calories': calories,
-          'protein': proteins,
+          'protein': protein,
           'carbs': carbs,
-          'fat': fats,
+          'fat': fat,
           'nutrients': [
-            {'name': 'Protein', 'amount': proteins, 'unit': 'g'},
+            {'name': 'Protein', 'amount': protein, 'unit': 'g'},
             {'name': 'Carbohydrates', 'amount': carbs, 'unit': 'g'},
-            {'name': 'Fat', 'amount': fats, 'unit': 'g'},
+            {'name': 'Fat', 'amount': fat, 'unit': 'g'},
           ]
         }
       };
     } catch (e) {
-      print('Error formatting API response: $e');
-      // Return default values if parsing fails
+      print('Error extracting food info from OpenAI response: $e');
+      // Return a default structure if parsing fails
       return {
         'category': {'name': 'Unknown Food'},
         'nutrition': {
@@ -285,275 +228,404 @@ class FoodApiService {
   }
 
   /// Get detailed information about a specific food ingredient by name
-  /// [name] - The food name to search for
-  /// Returns detailed nutritional information about the ingredient
   Future<Map<String, dynamic>> getFoodInformation(String name) async {
     // Check if we've exceeded our daily quota
     if (await isDailyQuotaExceeded()) {
       throw Exception('Daily API quota exceeded. Please try again tomorrow.');
     }
 
-    // Check if API key is available
-    if (apiKey.isEmpty) {
-      throw Exception(
-          'OpenAI API key is missing. Please check your .env file.');
-    }
-
     try {
-      // Construct the API endpoint
-      var uri = Uri.https(baseUrl, chatEndpoint);
-
-      // Create request body for OpenAI chat API
-      final requestBody = json.encode({
-        "model": textModel,
-        "messages": [
-          {
-            "role": "system",
-            "content":
-                "You are a nutrition information system. When given a food name, provide accurate nutritional information. Return ONLY JSON with no additional text."
-          },
-          {
-            "role": "user",
-            "content":
-                "Provide detailed nutritional information for $name. Return the response in JSON format with the following structure: {\"name\": \"$name\", \"nutrition\": {\"calories\": 123, \"protein\": 12, \"carbs\": 34, \"fat\": 5}}. Be as accurate as possible with the nutritional values."
-          }
-        ],
-        "max_tokens": 500
-      });
-
-      // Send the request
-      final response = await http.post(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiKey',
-        },
-        body: requestBody,
-      );
-
-      // Increment quota usage
-      await incrementQuotaUsage();
-
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body) as Map<String, dynamic>;
-
-        // Extract the content from the OpenAI response
-        String content = responseData['choices'][0]['message']['content'];
-
-        // Try to extract JSON from the content (in case there's text around it)
-        RegExp jsonRegex = RegExp(r'{[\s\S]*}');
-        Match? match = jsonRegex.firstMatch(content);
-
-        String jsonContent = match != null ? match.group(0)! : content;
-
-        try {
-          // Parse the JSON content
-          Map<String, dynamic> foodData = json.decode(jsonContent);
-
-          // Format the response for our app
-          return _formatResponseForApp(foodData);
-        } catch (e) {
-          print('Error parsing JSON from OpenAI: $e');
-          // Try to extract food information from text response
-          return _extractFoodInfoFromText(content);
-        }
-      } else {
-        print('API error: ${response.body}');
-        throw Exception(
-            'Failed to get food information: ${response.statusCode}, ${response.body}');
-      }
+      // Try OpenAI first
+      return await _getFoodInfoFromOpenAI(name);
     } catch (e) {
-      print('Error getting food information: $e');
+      // Log the error for analytics
+      await _logError('OpenAI', e.toString());
+      print('OpenAI error, falling back to Google Vision for text: $e');
 
-      // Return default values with the food name
-      return {
-        'name': name,
-        'nutrition': {
-          'calories': 250.0,
-          'protein': 10.0,
-          'carbs': 30.0,
-          'fat': 12.0,
-          'nutrients': [
-            {'name': 'Protein', 'amount': 10.0, 'unit': 'g'},
-            {'name': 'Carbohydrates', 'amount': 30.0, 'unit': 'g'},
-            {'name': 'Fat', 'amount': 12.0, 'unit': 'g'},
-          ]
-        }
-      };
+      // Fall back to Google Vision
+      return await _fallbackProvider.getFoodInformation(
+          name, _googleApiKey, _textModel);
+    } finally {
+      // Increment quota usage regardless of which service was used
+      await incrementQuotaUsage();
     }
   }
 
+  /// Get food information from OpenAI
+  Future<Map<String, dynamic>> _getFoodInfoFromOpenAI(String name) async {
+    // Create OpenAI API request body
+    final requestBody = {
+      "model": _textModel,
+      "messages": [
+        {
+          "role": "system",
+          "content":
+              "You are a nutritional information system. Provide detailed nutritional facts for food items."
+        },
+        {
+          "role": "user",
+          "content":
+              "Provide nutritional information for $name including calories, protein, carbs, and fat content in grams."
+        }
+      ],
+      "max_tokens": 300
+    };
+
+    // Send request to OpenAI
+    final uri = Uri.https(_openAIBaseUrl, _openAIImagesEndpoint);
+    final response = await http
+        .post(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $_openAIApiKey',
+          },
+          body: jsonEncode(requestBody),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'OpenAI API error: ${response.statusCode}, ${response.body}');
+    }
+
+    // Parse OpenAI response
+    final responseData = jsonDecode(response.body);
+    print('OpenAI Response: $responseData');
+
+    // Extract food information from OpenAI response
+    return _extractFoodInfoFromOpenAI(responseData);
+  }
+
   /// Search for foods by name
-  /// [query] - The search term
-  /// Returns a list of matching food items
   Future<List<dynamic>> searchFoods(String query) async {
     // Check if we've exceeded our daily quota
     if (await isDailyQuotaExceeded()) {
       throw Exception('Daily API quota exceeded. Please try again tomorrow.');
     }
 
-    // Check if API key is available
-    if (apiKey.isEmpty) {
+    try {
+      // Try OpenAI first
+      return await _searchFoodsWithOpenAI(query);
+    } catch (e) {
+      // Log the error for analytics
+      await _logError('OpenAI', e.toString());
+      print('OpenAI error, falling back to Google Vision for search: $e');
+
+      // Fall back to Google Vision
+      return await _fallbackProvider.searchFoods(
+          query, _googleApiKey, _textModel);
+    } finally {
+      // Increment quota usage regardless of which service was used
+      await incrementQuotaUsage();
+    }
+  }
+
+  /// Search for foods with OpenAI
+  Future<List<dynamic>> _searchFoodsWithOpenAI(String query) async {
+    // Create OpenAI API request body
+    final requestBody = {
+      "model": _textModel,
+      "messages": [
+        {
+          "role": "system",
+          "content":
+              "You are a food database system. Provide food items matching the search query with nutritional information."
+        },
+        {
+          "role": "user",
+          "content":
+              "Find food items matching '$query'. For each item, provide name, calories, protein, carbs, and fat content in JSON format."
+        }
+      ],
+      "max_tokens": 500
+    };
+
+    // Send request to OpenAI
+    final uri = Uri.https(_openAIBaseUrl, _openAIImagesEndpoint);
+    final response = await http
+        .post(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $_openAIApiKey',
+          },
+          body: jsonEncode(requestBody),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200) {
       throw Exception(
-          'OpenAI API key is missing. Please check your .env file.');
+          'OpenAI API error: ${response.statusCode}, ${response.body}');
     }
 
+    // Parse OpenAI response
+    final responseData = jsonDecode(response.body);
+    print('OpenAI Response: $responseData');
+
+    // Extract food items from OpenAI response
+    return _extractFoodItemsFromOpenAI(responseData, query);
+  }
+
+  /// Extract food items from OpenAI response
+  List<dynamic> _extractFoodItemsFromOpenAI(
+      Map<String, dynamic> response, String query) {
     try {
-      // Construct the API endpoint
-      var uri = Uri.https(baseUrl, chatEndpoint);
+      // Get the content from the response
+      final content = response['choices'][0]['message']['content'] as String;
 
-      // Create request body for OpenAI chat API
-      final requestBody = json.encode({
-        "model": textModel,
-        "messages": [
-          {
-            "role": "system",
-            "content":
-                "You are a food database API. Return JSON only, with no explanatory text."
-          },
-          {
-            "role": "user",
-            "content":
-                "Provide a list of 5 food items that match the search term: '$query'. Return the response as a JSON array of objects with the following structure: [{\"id\": 1, \"name\": \"Food Name\", \"nutrition\": {\"calories\": 123, \"protein\": 12, \"carbs\": 34, \"fat\": 5}}]"
-          }
-        ],
-        "max_tokens": 1000
-      });
+      // Try to find JSON in the response
+      final jsonMatches =
+          RegExp(r'\[\s*\{.*\}\s*\]', dotAll: true).firstMatch(content);
 
-      // Send the request
-      final response = await http.post(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiKey',
-        },
-        body: requestBody,
-      );
+      if (jsonMatches != null) {
+        // Try to parse the JSON array
+        final jsonString = jsonMatches.group(0)!;
+        final items = jsonDecode(jsonString) as List;
 
-      // Increment quota usage
-      await incrementQuotaUsage();
+        // Format each item
+        return items.map((item) {
+          // Ensure we have all required fields
+          final name = item['name'] ?? 'Unknown Food';
+          final calories = _parseDoubleValue(item['calories']) ?? 0.0;
+          final protein = _parseDoubleValue(item['protein']) ?? 0.0;
+          final carbs = _parseDoubleValue(item['carbs']) ?? 0.0;
+          final fat = _parseDoubleValue(item['fat']) ?? 0.0;
 
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body) as Map<String, dynamic>;
-
-        // Extract the content from the OpenAI response
-        String content = responseData['choices'][0]['message']['content'];
-
-        // Try to extract JSON from the content (in case there's text around it)
-        RegExp jsonRegex = RegExp(r'\[[\s\S]*\]');
-        Match? match = jsonRegex.firstMatch(content);
-
-        String jsonContent = match != null ? match.group(0)! : content;
-
-        try {
-          // Parse the JSON content
-          List<dynamic> foodItems = json.decode(jsonContent);
-          return foodItems;
-        } catch (e) {
-          print('Error parsing JSON from OpenAI search results: $e');
-          // Create a fallback result with the query term
-          return [
-            {
-              'id': 1,
-              'name': query,
-              'nutrition': {
-                'calories': 250.0,
-                'protein': 10.0,
-                'carbs': 30.0,
-                'fat': 12.0
-              }
+          return {
+            'id': DateTime.now().millisecondsSinceEpoch.toString(),
+            'name': name,
+            'nutrition': {
+              'calories': calories,
+              'protein': protein,
+              'carbs': carbs,
+              'fat': fat,
+              'nutrients': [
+                {'name': 'Protein', 'amount': protein, 'unit': 'g'},
+                {'name': 'Carbohydrates', 'amount': carbs, 'unit': 'g'},
+                {'name': 'Fat', 'amount': fat, 'unit': 'g'},
+              ]
             }
-          ];
-        }
-      } else {
-        print('API error: ${response.body}');
-        throw Exception(
-            'Failed to search foods: ${response.statusCode}, ${response.body}');
+          };
+        }).toList();
       }
+
+      // If JSON parsing fails, use fallback database
+      print('No valid JSON found in OpenAI response, using fallback database');
+      return _searchFallbackDatabase(query);
     } catch (e) {
-      print('Error searching foods: $e');
-      // Create a fallback result with the query term
-      return [
-        {
-          'id': 1,
-          'name': query,
+      print('Error extracting food items from OpenAI response: $e');
+      // Return results from fallback database
+      return _searchFallbackDatabase(query);
+    }
+  }
+
+  /// Parse a numeric value from various formats
+  double? _parseDoubleValue(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      // Remove any non-numeric characters except decimal points
+      final cleanValue = value.replaceAll(RegExp(r'[^\d.]'), '');
+      return double.tryParse(cleanValue);
+    }
+    return null;
+  }
+
+  /// Search fallback food database (simple in-memory database)
+  List<dynamic> _searchFallbackDatabase(String query) {
+    final lowerQuery = query.toLowerCase();
+    final results = <Map<String, dynamic>>[];
+
+    // Simple food database for fallback
+    final foodDatabase = {
+      "apple": {"calories": 95.0, "protein": 0.5, "carbs": 25.0, "fat": 0.3},
+      "banana": {"calories": 105.0, "protein": 1.3, "carbs": 27.0, "fat": 0.4},
+      "orange": {"calories": 65.0, "protein": 1.3, "carbs": 16.0, "fat": 0.2},
+      "pizza": {"calories": 285.0, "protein": 12.0, "carbs": 39.0, "fat": 10.0},
+      "burger": {
+        "calories": 350.0,
+        "protein": 20.0,
+        "carbs": 33.0,
+        "fat": 15.0
+      },
+      "salad": {"calories": 150.0, "protein": 3.0, "carbs": 10.0, "fat": 10.0},
+      "chicken": {"calories": 165.0, "protein": 31.0, "carbs": 0.0, "fat": 3.6},
+      "rice": {"calories": 130.0, "protein": 2.7, "carbs": 28.0, "fat": 0.3}
+    };
+
+    // Find matching foods
+    for (final entry in foodDatabase.entries) {
+      if (entry.key.contains(lowerQuery) || lowerQuery.contains(entry.key)) {
+        results.add({
+          'id': entry.key,
+          'name':
+              entry.key.substring(0, 1).toUpperCase() + entry.key.substring(1),
           'nutrition': {
-            'calories': 250.0,
-            'protein': 10.0,
-            'carbs': 30.0,
-            'fat': 12.0
+            'calories': entry.value['calories'],
+            'protein': entry.value['protein'],
+            'carbs': entry.value['carbs'],
+            'fat': entry.value['fat'],
+            'nutrients': [
+              {
+                'name': 'Protein',
+                'amount': entry.value['protein'],
+                'unit': 'g'
+              },
+              {
+                'name': 'Carbohydrates',
+                'amount': entry.value['carbs'],
+                'unit': 'g'
+              },
+              {'name': 'Fat', 'amount': entry.value['fat'], 'unit': 'g'},
+            ]
           }
-        }
-      ];
+        });
+      }
+    }
+
+    // Return at least 3 items (add default items if needed)
+    if (results.isEmpty) {
+      // Default items
+      final defaultItems = ['apple', 'banana', 'chicken'];
+      for (final item in defaultItems) {
+        final food = foodDatabase[item]!;
+        results.add({
+          'id': item,
+          'name':
+              '${item.substring(0, 1).toUpperCase() + item.substring(1)} (suggested)',
+          'nutrition': {
+            'calories': food['calories'],
+            'protein': food['protein'],
+            'carbs': food['carbs'],
+            'fat': food['fat'],
+            'nutrients': [
+              {'name': 'Protein', 'amount': food['protein'], 'unit': 'g'},
+              {'name': 'Carbohydrates', 'amount': food['carbs'], 'unit': 'g'},
+              {'name': 'Fat', 'amount': food['fat'], 'unit': 'g'},
+            ]
+          }
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /// Log error for analytics (minimal data usage)
+  Future<void> _logError(String service, String errorMessage) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Get existing error log
+      final errorLog = prefs.getStringList(_errorLogKey) ?? [];
+
+      // Add new error with timestamp
+      final timestamp = DateTime.now().toIso8601String();
+      final errorEntry =
+          '$timestamp|$service|${errorMessage.substring(0, Math.min(100, errorMessage.length))}';
+
+      // Keep only the most recent 20 errors
+      errorLog.add(errorEntry);
+      if (errorLog.length > 20) {
+        errorLog.removeAt(0);
+      }
+
+      // Save updated log
+      await prefs.setStringList(_errorLogKey, errorLog);
+    } catch (e) {
+      print('Error logging API error: $e');
+      // Continue execution even if logging fails
     }
   }
 
   /// Check if we've exceeded our self-imposed daily quota limit
-  /// Returns true if the quota is exceeded, false otherwise
   Future<bool> isDailyQuotaExceeded() async {
-    final prefs = await SharedPreferences.getInstance();
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-    // Get today's date as a string (YYYY-MM-DD format)
-    final today = DateTime.now().toString().split(' ')[0];
+      // Get today's date as a string (YYYY-MM-DD format)
+      final today = DateTime.now().toString().split(' ')[0];
 
-    // Get the last date we recorded quota usage
-    final lastQuotaDate = prefs.getString(_quotaDateKey) ?? '';
+      // Get the last date we recorded quota usage
+      final lastQuotaDate = prefs.getString(_quotaDateKey) ?? '';
 
-    // If it's a new day, reset the quota
-    if (lastQuotaDate != today) {
-      await prefs.setString(_quotaDateKey, today);
-      await prefs.setInt(_quotaUsedKey, 0);
+      // If it's a new day, reset the quota
+      if (lastQuotaDate != today) {
+        await prefs.setString(_quotaDateKey, today);
+        await prefs.setInt(_quotaUsedKey, 0);
+        return false;
+      }
+
+      // Get current quota usage
+      final quotaUsed = prefs.getInt(_quotaUsedKey) ?? 0;
+
+      // Check if we've exceeded our limit
+      return quotaUsed >= dailyQuotaLimit;
+    } catch (e) {
+      print('Error checking quota: $e');
+      // In case of error, assume we haven't exceeded quota for better UX
       return false;
     }
-
-    // Get current quota usage
-    final quotaUsed = prefs.getInt(_quotaUsedKey) ?? 0;
-
-    // Check if we've exceeded our limit
-    return quotaUsed >= dailyQuotaLimit;
   }
 
   /// Increment the quota usage counter
   Future<void> incrementQuotaUsage() async {
-    final prefs = await SharedPreferences.getInstance();
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-    // Get today's date as a string (YYYY-MM-DD format)
-    final today = DateTime.now().toString().split(' ')[0];
+      // Get today's date as a string (YYYY-MM-DD format)
+      final today = DateTime.now().toString().split(' ')[0];
 
-    // Get the last date we recorded quota usage
-    final lastQuotaDate = prefs.getString(_quotaDateKey) ?? '';
+      // Get the last date we recorded quota usage
+      final lastQuotaDate = prefs.getString(_quotaDateKey) ?? '';
 
-    // If it's a new day, reset the quota
-    if (lastQuotaDate != today) {
-      await prefs.setString(_quotaDateKey, today);
-      await prefs.setInt(_quotaUsedKey, 1); // Set to 1 for this first request
-      return;
+      // If it's a new day, reset the quota
+      if (lastQuotaDate != today) {
+        await prefs.setString(_quotaDateKey, today);
+        await prefs.setInt(_quotaUsedKey, 1); // Set to 1 for this first request
+        return;
+      }
+
+      // Get current quota usage and increment it
+      final quotaUsed = prefs.getInt(_quotaUsedKey) ?? 0;
+      await prefs.setInt(_quotaUsedKey, quotaUsed + 1);
+    } catch (e) {
+      print('Error incrementing quota: $e');
+      // Continue execution even if quota tracking fails
     }
-
-    // Get current quota usage and increment it
-    final quotaUsed = prefs.getInt(_quotaUsedKey) ?? 0;
-    await prefs.setInt(_quotaUsedKey, quotaUsed + 1);
   }
 
   /// Get the remaining quota for today
   Future<int> getRemainingQuota() async {
-    final prefs = await SharedPreferences.getInstance();
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-    // Get today's date as a string (YYYY-MM-DD format)
-    final today = DateTime.now().toString().split(' ')[0];
+      // Get today's date as a string (YYYY-MM-DD format)
+      final today = DateTime.now().toString().split(' ')[0];
 
-    // Get the last date we recorded quota usage
-    final lastQuotaDate = prefs.getString(_quotaDateKey) ?? '';
+      // Get the last date we recorded quota usage
+      final lastQuotaDate = prefs.getString(_quotaDateKey) ?? '';
 
-    // If it's a new day, the full quota is available
-    if (lastQuotaDate != today) {
+      // If it's a new day, the full quota is available
+      if (lastQuotaDate != today) {
+        return dailyQuotaLimit;
+      }
+
+      // Get current quota usage
+      final quotaUsed = prefs.getInt(_quotaUsedKey) ?? 0;
+
+      // Calculate remaining quota
+      return (dailyQuotaLimit - quotaUsed).clamp(0, dailyQuotaLimit);
+    } catch (e) {
+      print('Error getting remaining quota: $e');
+      // In case of error, return a safe default
       return dailyQuotaLimit;
     }
-
-    // Get current quota usage
-    final quotaUsed = prefs.getInt(_quotaUsedKey) ?? 0;
-
-    // Calculate remaining quota
-    return (dailyQuotaLimit - quotaUsed).clamp(0, dailyQuotaLimit);
   }
+}
+
+// For min function
+class Math {
+  static int min(int a, int b) => a < b ? a : b;
 }

@@ -9,18 +9,22 @@ import 'screens/exercise_screen.dart';
 import 'screens/settings_screen.dart';
 import 'widgets/custom_bottom_nav.dart';
 import 'widgets/custom_app_bar.dart';
+import 'data/services/api_service.dart'; // Import API service
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Load environment variables before the app starts
 Future<void> main() async {
   // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load .env file with wait to ensure it's loaded before app starts
+  // Load .env file
   await dotenv.load();
 
-  // Print environment variables for debugging (remove in production)
-  print('API_KEY: ${dotenv.env['API_KEY']?.substring(0, 3)}...');
-  print('PROXY_URL: ${dotenv.env['PROXY_URL']}');
+  // Initialize SharedPreferences
+  await SharedPreferences.getInstance();
+
+  // Pre-initialize the API service singleton
+  FoodApiService();
 
   // Run the app
   runApp(const MyApp());
