@@ -1,16 +1,24 @@
 // lib/data/repositories/food_repository.dart
 import 'dart:io';
+import 'dart:async';
 import '../models/food_item.dart';
-import '../services/api_service.dart'; // Make sure imports match your renamed service
+import '../services/api_service.dart';
 import '../storage/local_storage.dart';
 
 /// Repository for managing food data from API and local storage
+/// Acts as a single access point for all food-related operations
 class FoodRepository {
-  final FoodApiService _apiService = FoodApiService(); // Updated service name
+  final FoodApiService _apiService = FoodApiService();
   final LocalStorage _storage = LocalStorage();
 
+  // Storage keys
   static const String _foodEntriesKey = 'food_entries';
   static const String _tempImageFolderKey = 'food_images';
+  static const String _recentSearchesKey = 'recent_food_searches';
+  static const String _favoriteFoodsKey = 'favorite_foods';
+
+  // Maximum number of recent searches to store
+  static const int _maxRecentSearches = 10;
 
   /// Recognize food from an image and return results
   /// Takes an image file and meal type (breakfast, lunch, dinner, snack)
@@ -20,16 +28,13 @@ class FoodRepository {
       // Call the API to analyze the image
       final analysisResult = await _apiService.analyzeImage(imageFile);
 
-      // Print response for debugging
-      print('API Response: $analysisResult');
-
       // Save the image file for reference
       final savedImagePath = await _saveImageFile(imageFile);
 
       // Process the results
       final List<FoodItem> recognizedItems = [];
 
-      // Process response format - may have different structures
+      // Process response based on structure
       if (analysisResult.containsKey('category')) {
         // Single food item recognized (typical case)
         final item = FoodItem.fromApiAnalysis(analysisResult, mealType)
@@ -43,10 +48,8 @@ class FoodRepository {
           try {
             if (annotation.containsKey('name') && annotation['name'] != null) {
               // Get detailed food information using the name
-              print('Getting details for food: ${annotation['name']}');
               final foodInfo =
                   await _apiService.getFoodInformation(annotation['name']);
-              print('Food info: $foodInfo');
 
               // Create food item with nutrition details
               final item = FoodItem(
@@ -62,18 +65,12 @@ class FoodRepository {
                 timestamp: DateTime.now(),
                 servingSize: 1.0,
                 servingUnit: 'serving',
-                spoonacularId: null, // Removed specific API reference
+                spoonacularId: null,
               );
-
-              // Print for debugging
-              print(
-                  'Created food item: ${item.name}, calories: ${item.calories}, proteins: ${item.proteins}, carbs: ${item.carbs}, fats: ${item.fats}');
 
               recognizedItems.add(item);
             } else {
               // Add with limited information if name is missing
-              print(
-                  'Creating food item with limited info for: ${annotation['description'] ?? 'Unknown'}');
               final item = FoodItem(
                 id: DateTime.now().millisecondsSinceEpoch.toString(),
                 name: annotation['description'] ?? 'Unknown Food',
@@ -94,7 +91,6 @@ class FoodRepository {
               recognizedItems.add(item);
             }
           } catch (e) {
-            print('Error getting food details: $e');
             // Add with limited information if detailed call fails
             final item = FoodItem(
               id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -116,16 +112,12 @@ class FoodRepository {
       } else if (analysisResult.containsKey('nutrition') &&
           analysisResult.containsKey('name')) {
         // Direct nutritional information with name
-        print('Creating food item from direct nutrition data');
         final calories =
             _extractNutrientValue(analysisResult, 'calories') ?? 0.0;
         final proteins =
             _extractNutrientValue(analysisResult, 'protein') ?? 0.0;
         final carbs = _extractNutrientValue(analysisResult, 'carbs') ?? 0.0;
         final fats = _extractNutrientValue(analysisResult, 'fat') ?? 0.0;
-
-        print(
-            'Extracted values: calories=$calories, proteins=$proteins, carbs=$carbs, fats=$fats');
 
         final item = FoodItem(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -170,34 +162,12 @@ class FoodRepository {
         }
 
         // Fallback if no food is recognized or format is unexpected
-        print(
-            'Unrecognized response format. Available keys: ${analysisResult.keys.join(", ")}');
         throw Exception(
             'No food recognized in the image or unsupported response format');
       }
 
-      // For testing - if we got no items, add a dummy food item
-      if (recognizedItems.isEmpty && false) {
-        // Set to true for testing
-        recognizedItems.add(FoodItem(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          name: 'Test Food Item',
-          calories: 250.0,
-          proteins: 15.0,
-          carbs: 30.0,
-          fats: 8.0,
-          imagePath: savedImagePath,
-          mealType: mealType,
-          timestamp: DateTime.now(),
-          servingSize: 1.0,
-          servingUnit: 'serving',
-        ));
-      }
-
-      print('Recognized ${recognizedItems.length} food items');
       return recognizedItems;
     } catch (e) {
-      print('Food recognition error: $e');
       throw Exception('Failed to recognize food: $e');
     }
   }
@@ -206,8 +176,6 @@ class FoodRepository {
   double? _extractNutrientValue(
       Map<String, dynamic> data, String nutrientName) {
     try {
-      print('Extracting $nutrientName from: $data');
-
       // Direct access if the property exists at top level
       if (data.containsKey(nutrientName)) {
         final value = data[nutrientName];
@@ -253,7 +221,6 @@ class FoodRepository {
 
       return null;
     } catch (e) {
-      print('Error extracting nutrient $nutrientName: $e');
       return null;
     }
   }
@@ -279,7 +246,6 @@ class FoodRepository {
 
       return savedImage.path;
     } catch (e) {
-      print('Error saving food image: $e');
       return null;
     }
   }
@@ -287,13 +253,10 @@ class FoodRepository {
   /// Save a food entry to local storage
   Future<bool> saveFoodEntry(FoodItem item) async {
     try {
-      print(
-          'Saving food entry: ${item.name}, proteins=${item.proteins}, carbs=${item.carbs}, fats=${item.fats}');
       final entries = await getFoodEntries(item.timestamp);
       entries.add(item);
       return _saveFoodEntries(entries);
     } catch (e) {
-      print('Error saving food entry: $e');
       return false;
     }
   }
@@ -302,14 +265,6 @@ class FoodRepository {
   Future<bool> saveFoodEntries(List<FoodItem> items) async {
     try {
       if (items.isEmpty) return true;
-
-      print('Saving ${items.length} food entries');
-      // Print first item for debugging
-      if (items.isNotEmpty) {
-        final item = items.first;
-        print(
-            'First item: ${item.name}, proteins=${item.proteins}, carbs=${item.carbs}, fats=${item.fats}');
-      }
 
       // Group entries by date to ensure we don't overwrite entries from other dates
       final Map<String, List<FoodItem>> entriesByDate = {};
@@ -332,7 +287,6 @@ class FoodRepository {
 
       return allSaved;
     } catch (e) {
-      print('Error saving multiple food entries: $e');
       return false;
     }
   }
@@ -341,19 +295,8 @@ class FoodRepository {
   Future<List<FoodItem>> getFoodEntries(DateTime date) async {
     try {
       final entries = await _getFoodEntriesForDate(date);
-      print(
-          'Retrieved ${entries.length} food entries for ${_getDateKey(date)}');
-
-      // Debug: Print first entry if available
-      if (entries.isNotEmpty) {
-        final item = entries.first;
-        print(
-            'First item: ${item.name}, proteins=${item.proteins}, carbs=${item.carbs}, fats=${item.fats}');
-      }
-
       return entries;
     } catch (e) {
-      print('Error retrieving food entries: $e');
       return [];
     }
   }
@@ -377,12 +320,8 @@ class FoodRepository {
       final key = '${_foodEntriesKey}_$dateKey';
       final entriesMaps = entries.map((entry) => entry.toMap()).toList();
 
-      // Print for debugging
-      print('Saving ${entries.length} entries for date $dateKey');
-
       return await _storage.setObjectList(key, entriesMaps);
     } catch (e) {
-      print('Error saving food entries for date $dateKey: $e');
       return false;
     }
   }
@@ -415,7 +354,6 @@ class FoodRepository {
 
       return false;
     } catch (e) {
-      print('Error updating food entry: $e');
       return false;
     }
   }
@@ -435,7 +373,28 @@ class FoodRepository {
 
       return _saveFoodEntriesForDate(filtered, dateKey);
     } catch (e) {
-      print('Error deleting food entry: $e');
+      return false;
+    }
+  }
+
+  /// Delete multiple food entries by IDs for a specific date
+  Future<bool> deleteFoodEntries(List<String> ids, DateTime date) async {
+    try {
+      if (ids.isEmpty) return true;
+
+      final dateKey = _getDateKey(date);
+      final entries = await _getFoodEntriesForDate(date);
+
+      final filtered =
+          entries.where((entry) => !ids.contains(entry.id)).toList();
+
+      if (filtered.length == entries.length) {
+        // No entries were removed
+        return false;
+      }
+
+      return _saveFoodEntriesForDate(filtered, dateKey);
+    } catch (e) {
       return false;
     }
   }
@@ -445,8 +404,6 @@ class FoodRepository {
       DateTime date) async {
     try {
       final allEntries = await getFoodEntries(date);
-      print(
-          'Retrieved ${allEntries.length} total entries for ${_getDateKey(date)}');
 
       // Group entries by meal type
       final Map<String, List<FoodItem>> entriesByMeal = {
@@ -466,26 +423,83 @@ class FoodRepository {
         }
       }
 
-      // Print summary of entries by meal type for debugging
-      entriesByMeal.forEach((mealType, entries) {
-        print('$mealType: ${entries.length} entries');
-
-        // Print nutritional data for the first entry in each meal type
-        if (entries.isNotEmpty) {
-          final item = entries.first;
-          print(
-              '  First item: ${item.name}, calories=${item.calories}, proteins=${item.proteins}, carbs=${item.carbs}, fats=${item.fats}');
-        }
-      });
-
       return entriesByMeal;
     } catch (e) {
-      print('Error getting food entries by meal: $e');
       return {
         'breakfast': [],
         'lunch': [],
         'dinner': [],
         'snack': [],
+      };
+    }
+  }
+
+  /// Get food entries for a date range grouped by date
+  Future<Map<String, List<FoodItem>>> getFoodEntriesForDateRange(
+      DateTime startDate, DateTime endDate) async {
+    final Map<String, List<FoodItem>> entriesByDate = {};
+
+    try {
+      // Ensure end date is not before start date
+      if (endDate.isBefore(startDate)) {
+        final temp = startDate;
+        startDate = endDate;
+        endDate = temp;
+      }
+
+      // Create a list of all dates in the range
+      final List<DateTime> dates = [];
+      for (var date = startDate;
+          !date.isAfter(endDate);
+          date = date.add(const Duration(days: 1))) {
+        dates.add(date);
+      }
+
+      // Get entries for each date
+      for (final date in dates) {
+        final dateKey = _getDateKey(date);
+        final entries = await getFoodEntries(date);
+        entriesByDate[dateKey] = entries;
+      }
+
+      return entriesByDate;
+    } catch (e) {
+      return entriesByDate;
+    }
+  }
+
+  /// Get nutrition summary for a specific date
+  Future<Map<String, dynamic>> getNutritionSummary(DateTime date) async {
+    try {
+      final entries = await getFoodEntries(date);
+
+      double totalCalories = 0;
+      double totalProtein = 0;
+      double totalCarbs = 0;
+      double totalFat = 0;
+
+      for (final entry in entries) {
+        final nutritionValues = entry.getNutritionForServing();
+        totalCalories += nutritionValues['calories'] ?? 0;
+        totalProtein += nutritionValues['proteins'] ?? 0;
+        totalCarbs += nutritionValues['carbs'] ?? 0;
+        totalFat += nutritionValues['fats'] ?? 0;
+      }
+
+      return {
+        'calories': totalCalories,
+        'protein': totalProtein,
+        'carbs': totalCarbs,
+        'fat': totalFat,
+        'entryCount': entries.length,
+      };
+    } catch (e) {
+      return {
+        'calories': 0.0,
+        'protein': 0.0,
+        'carbs': 0.0,
+        'fat': 0.0,
+        'entryCount': 0,
       };
     }
   }
@@ -497,10 +511,12 @@ class FoodRepository {
         return [];
       }
 
-      final searchResults = await _apiService.searchFoods(query);
-      print('Found ${searchResults.length} search results for "$query"');
+      // Save query to recent searches
+      await _addToRecentSearches(query);
 
-      // Convert search results to// Convert search results to FoodItem objects
+      final searchResults = await _apiService.searchFoods(query);
+
+      // Convert search results to FoodItem objects
       final List<FoodItem> foodItems = [];
 
       for (var result in searchResults) {
@@ -514,16 +530,12 @@ class FoodRepository {
             if (!result.containsKey('nutrition') ||
                 result['nutrition'] == null) {
               foodInfo = await _apiService.getFoodInformation(result['name']);
-              print('Got detailed info for ${result['name']}');
             }
 
             final calories = _extractNutrientValue(foodInfo, 'calories') ?? 0.0;
             final proteins = _extractNutrientValue(foodInfo, 'protein') ?? 0.0;
             final carbs = _extractNutrientValue(foodInfo, 'carbs') ?? 0.0;
             final fats = _extractNutrientValue(foodInfo, 'fat') ?? 0.0;
-
-            print(
-                'Extracted values: calories=$calories, proteins=$proteins, carbs=$carbs, fats=$fats');
 
             final item = FoodItem(
               id: DateTime.now().millisecondsSinceEpoch.toString() +
@@ -557,7 +569,6 @@ class FoodRepository {
             ));
           }
         } catch (e) {
-          print('Error getting detailed food info: $e');
           // Add with limited information
           foodItems.add(FoodItem(
             id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -576,13 +587,203 @@ class FoodRepository {
 
       return foodItems;
     } catch (e) {
-      print('Error searching foods: $e');
       throw Exception('Failed to search for foods: $e');
+    }
+  }
+
+  /// Add a search query to recent searches
+  Future<bool> _addToRecentSearches(String query) async {
+    try {
+      final trimmedQuery = query.trim();
+      if (trimmedQuery.isEmpty) return false;
+
+      // Get existing recent searches
+      List<String> recentSearches =
+          await _storage.getStringList(_recentSearchesKey) ?? [];
+
+      // Remove if it already exists (to move it to the front)
+      recentSearches.remove(trimmedQuery);
+
+      // Add to the beginning of the list
+      recentSearches.insert(0, trimmedQuery);
+
+      // Limit the number of recent searches
+      if (recentSearches.length > _maxRecentSearches) {
+        recentSearches = recentSearches.sublist(0, _maxRecentSearches);
+      }
+
+      // Save updated list
+      return await _storage.setStringList(_recentSearchesKey, recentSearches);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Get recent food searches
+  Future<List<String>> getRecentSearches() async {
+    try {
+      return await _storage.getStringList(_recentSearchesKey) ?? [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Clear recent searches
+  Future<bool> clearRecentSearches() async {
+    try {
+      return await _storage.remove(_recentSearchesKey);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Add a food item to favorites
+  Future<bool> addToFavorites(FoodItem item) async {
+    try {
+      // Get existing favorites
+      final favoritesList =
+          await _storage.getObjectList(_favoriteFoodsKey) ?? [];
+
+      // Check if it already exists
+      final exists = favoritesList.any((favorite) =>
+          favorite['id'] == item.id ||
+          (favorite['name'] == item.name &&
+              favorite['calories'] == item.calories));
+
+      if (exists) return true; // Already a favorite
+
+      // Add to favorites
+      favoritesList.add(item.toMap());
+
+      // Save updated list
+      return await _storage.setObjectList(_favoriteFoodsKey, favoritesList);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Remove a food item from favorites
+  Future<bool> removeFromFavorites(String id) async {
+    try {
+      // Get existing favorites
+      final favoritesList =
+          await _storage.getObjectList(_favoriteFoodsKey) ?? [];
+
+      // Remove item with matching ID
+      final filteredList =
+          favoritesList.where((favorite) => favorite['id'] != id).toList();
+
+      if (filteredList.length == favoritesList.length) {
+        return false; // No item was removed
+      }
+
+      // Save updated list
+      return await _storage.setObjectList(_favoriteFoodsKey, filteredList);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Get favorite food items
+  Future<List<FoodItem>> getFavorites() async {
+    try {
+      final favoritesList =
+          await _storage.getObjectList(_favoriteFoodsKey) ?? [];
+
+      return favoritesList.map((map) => FoodItem.fromMap(map)).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Check if a food item is in favorites
+  Future<bool> isFavorite(String id) async {
+    try {
+      final favoritesList =
+          await _storage.getObjectList(_favoriteFoodsKey) ?? [];
+
+      return favoritesList.any((favorite) => favorite['id'] == id);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Get frequently logged foods (based on occurrence in the last 30 days)
+  Future<List<FoodItem>> getFrequentlyLoggedFoods(int limit) async {
+    try {
+      // Get entries for the last 30 days
+      final now = DateTime.now();
+      final thirtyDaysAgo = now.subtract(const Duration(days: 30));
+
+      final Map<String, FoodItem> foodMap = {};
+      final Map<String, int> countMap = {};
+
+      // Go through each day
+      for (var date = thirtyDaysAgo;
+          !date.isAfter(now);
+          date = date.add(const Duration(days: 1))) {
+        final entries = await getFoodEntries(date);
+
+        for (final entry in entries) {
+          final key = '${entry.name}_${entry.calories}';
+
+          // Update count
+          countMap[key] = (countMap[key] ?? 0) + 1;
+
+          // Store the food item
+          foodMap[key] = entry;
+        }
+      }
+
+      // Sort by frequency
+      final sortedKeys = countMap.keys.toList()
+        ..sort((a, b) => countMap[b]!.compareTo(countMap[a]!));
+
+      // Create result list
+      final result = <FoodItem>[];
+      for (int i = 0; i < limit && i < sortedKeys.length; i++) {
+        result.add(foodMap[sortedKeys[i]]!.copyWith(
+          timestamp: DateTime.now(),
+        ));
+      }
+
+      return result;
+    } catch (e) {
+      return [];
     }
   }
 
   /// Get remaining API quota for today
   Future<int> getRemainingApiQuota() async {
     return _apiService.getRemainingQuota();
+  }
+
+  /// Clear all food data for a specific date
+  Future<bool> clearFoodEntriesForDate(DateTime date) async {
+    try {
+      final dateKey = _getDateKey(date);
+      final key = '${_foodEntriesKey}_$dateKey';
+
+      return await _storage.remove(key);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Delete all stored food images
+  Future<bool> clearAllFoodImages() async {
+    try {
+      final tempDir = await _storage.getTemporaryDirectory();
+      final foodImagesDir = Directory('${tempDir.path}/$_tempImageFolderKey');
+
+      if (await foodImagesDir.exists()) {
+        await foodImagesDir.delete(recursive: true);
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      return false;
+    }
   }
 }
