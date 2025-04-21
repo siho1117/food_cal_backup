@@ -84,14 +84,14 @@ class FoodApiService {
     final bytes = await imageFile.readAsBytes();
     final base64Image = base64Encode(bytes);
 
-    // Create OpenAI API request body
+    // Create OpenAI API request body with improved prompt for concise food names
     final requestBody = {
       "model": _visionModel,
       "messages": [
         {
           "role": "system",
           "content":
-              "You are a food recognition system. Identify the food item in the image and provide nutritional information."
+              "You are a food recognition system. Identify the food item in the image with a concise name (1-7 words maximum) and provide nutritional information. Use common food names that would appear in a food database."
         },
         {
           "role": "user",
@@ -99,7 +99,7 @@ class FoodApiService {
             {
               "type": "text",
               "text":
-                  "What food is in this image? Please provide the name and nutritional information including calories, protein, carbs, and fat."
+                  "What single food item is in this image? Reply in this exact format:\nFood Name: [concise name, 1-7 words]\nCalories: [number] cal\nProtein: [number] g\nCarbs: [number] g\nFat: [number] g\n\nIf you can't identify the food or the image doesn't contain food, respond with \"Food Name: Unidentified Food Item\" and provide estimated nutritional values."
             },
             {
               "type": "image_url",
@@ -143,24 +143,24 @@ class FoodApiService {
     try {
       // Get the content from the response
       final content = response['choices'][0]['message']['content'] as String;
+      print('Extracted content: $content'); // Debug print
 
-      // Use a basic parsing approach to extract information
-      // In a real implementation, you might want to use more robust parsing
+      // Initialize default values
       String name = 'Unknown Food';
       double calories = 0.0;
       double protein = 0.0;
       double carbs = 0.0;
       double fat = 0.0;
 
-      // Extract food name (usually the first line or after "Food:" or similar)
+      // Extract food name - looking for "Food Name:" or similar at the beginning of a line
       final nameMatches =
-          RegExp(r'(?:Food|Name)[:\s]+([^\n\.]+)', caseSensitive: false)
+          RegExp(r'(?:Food\s*Name|Name)[:\s]+([^\n\.]+)', caseSensitive: false)
               .firstMatch(content);
       if (nameMatches != null && nameMatches.groupCount >= 1) {
         name = nameMatches.group(1)!.trim();
       }
 
-      // Extract calories
+      // Extract calories - looking for "Calories:" followed by numbers
       final caloriesMatches =
           RegExp(r'(?:Calories|Cal)[:\s]+(\d+\.?\d*)', caseSensitive: false)
               .firstMatch(content);
@@ -168,7 +168,7 @@ class FoodApiService {
         calories = double.tryParse(caloriesMatches.group(1)!) ?? 0.0;
       }
 
-      // Extract protein
+      // Extract protein - looking for "Protein:" followed by numbers
       final proteinMatches =
           RegExp(r'(?:Protein)[:\s]+(\d+\.?\d*)', caseSensitive: false)
               .firstMatch(content);
@@ -176,7 +176,7 @@ class FoodApiService {
         protein = double.tryParse(proteinMatches.group(1)!) ?? 0.0;
       }
 
-      // Extract carbs
+      // Extract carbs - looking for "Carbs:" or "Carbohydrates:" followed by numbers
       final carbsMatches = RegExp(r'(?:Carbs|Carbohydrates)[:\s]+(\d+\.?\d*)',
               caseSensitive: false)
           .firstMatch(content);
@@ -184,13 +184,24 @@ class FoodApiService {
         carbs = double.tryParse(carbsMatches.group(1)!) ?? 0.0;
       }
 
-      // Extract fat
+      // Extract fat - looking for "Fat:" followed by numbers
       final fatMatches =
           RegExp(r'(?:Fat)[:\s]+(\d+\.?\d*)', caseSensitive: false)
               .firstMatch(content);
       if (fatMatches != null && fatMatches.groupCount >= 1) {
         fat = double.tryParse(fatMatches.group(1)!) ?? 0.0;
       }
+
+      // Check if the food was unidentified or unknown
+      if (name.toLowerCase().contains('unidentified') ||
+          name.toLowerCase().contains('unknown') ||
+          name.toLowerCase().contains('not food')) {
+        name = 'Unidentified Food Item';
+      }
+
+      // Debug print for extracted values
+      print(
+          'Extracted values: name=$name, calories=$calories, protein=$protein, carbs=$carbs, fat=$fat');
 
       // Format the response for our app
       return {
@@ -211,7 +222,7 @@ class FoodApiService {
       print('Error extracting food info from OpenAI response: $e');
       // Return a default structure if parsing fails
       return {
-        'category': {'name': 'Unknown Food'},
+        'category': {'name': 'Unidentified Food Item'},
         'nutrition': {
           'calories': 250.0,
           'protein': 10.0,
@@ -253,19 +264,19 @@ class FoodApiService {
 
   /// Get food information from OpenAI
   Future<Map<String, dynamic>> _getFoodInfoFromOpenAI(String name) async {
-    // Create OpenAI API request body
+    // Create OpenAI API request body with improved structured format
     final requestBody = {
       "model": _textModel,
       "messages": [
         {
           "role": "system",
           "content":
-              "You are a nutritional information system. Provide detailed nutritional facts for food items."
+              "You are a nutritional information system. Provide detailed nutritional facts for food items in a structured format."
         },
         {
           "role": "user",
           "content":
-              "Provide nutritional information for $name including calories, protein, carbs, and fat content in grams."
+              "Provide nutritional information for $name. Reply in this exact format:\nFood Name: $name\nCalories: [number] cal\nProtein: [number] g\nCarbs: [number] g\nFat: [number] g"
         }
       ],
       "max_tokens": 300
@@ -323,19 +334,19 @@ class FoodApiService {
 
   /// Search for foods with OpenAI
   Future<List<dynamic>> _searchFoodsWithOpenAI(String query) async {
-    // Create OpenAI API request body
+    // Create OpenAI API request body with improved output format
     final requestBody = {
       "model": _textModel,
       "messages": [
         {
           "role": "system",
           "content":
-              "You are a food database system. Provide food items matching the search query with nutritional information."
+              "You are a food database system. Provide food items matching the search query with concise names and nutritional information in a structured JSON format."
         },
         {
           "role": "user",
           "content":
-              "Find food items matching '$query'. For each item, provide name, calories, protein, carbs, and fat content in JSON format."
+              "Find up to 5 food items matching '$query'. For each item, provide a concise name (1-7 words) and nutritional information. Format your response as a valid JSON array with each object having the format: {\"name\": \"Food Name\", \"calories\": number, \"protein\": number, \"carbs\": number, \"fat\": number}. Ensure the numbers are just numeric values without units."
         }
       ],
       "max_tokens": 500
@@ -373,15 +384,19 @@ class FoodApiService {
     try {
       // Get the content from the response
       final content = response['choices'][0]['message']['content'] as String;
+      print('Extracting food items from: $content'); // Debug print
 
-      // Try to find JSON in the response
+      // Try to find JSON in the response - looking for an array [...]
       final jsonMatches =
           RegExp(r'\[\s*\{.*\}\s*\]', dotAll: true).firstMatch(content);
 
       if (jsonMatches != null) {
         // Try to parse the JSON array
         final jsonString = jsonMatches.group(0)!;
+        print('Found JSON array: $jsonString'); // Debug print
+
         final items = jsonDecode(jsonString) as List;
+        print('Successfully parsed ${items.length} items'); // Debug print
 
         // Format each item
         return items.map((item) {
@@ -391,6 +406,9 @@ class FoodApiService {
           final protein = _parseDoubleValue(item['protein']) ?? 0.0;
           final carbs = _parseDoubleValue(item['carbs']) ?? 0.0;
           final fat = _parseDoubleValue(item['fat']) ?? 0.0;
+
+          print(
+              'Formatted item: $name, cal=$calories, p=$protein, c=$carbs, f=$fat'); // Debug print
 
           return {
             'id': DateTime.now().millisecondsSinceEpoch.toString(),
@@ -408,16 +426,111 @@ class FoodApiService {
             }
           };
         }).toList();
-      }
+      } else {
+        // If JSON parsing fails, search for possible structured content
+        print('No valid JSON found, attempting to extract structured data');
 
-      // If JSON parsing fails, use fallback database
-      print('No valid JSON found in OpenAI response, using fallback database');
-      return _searchFallbackDatabase(query);
+        final items = <Map<String, dynamic>>[];
+
+        // Match individual food entry blocks
+        final foodBlocks = RegExp(
+                r'(?:Food|Name)[:\s]+([^\n]+)(?:\s*Calories?[:\s]+(\d+\.?\d*)(?:\s*cal)?)?(?:\s*Protein[:\s]+(\d+\.?\d*)(?:\s*g)?)?(?:\s*Carb(?:s|ohydrates)?[:\s]+(\d+\.?\d*)(?:\s*g)?)?(?:\s*Fat[:\s]+(\d+\.?\d*)(?:\s*g)?)?',
+                caseSensitive: false)
+            .allMatches(content);
+
+        for (final match in foodBlocks) {
+          if (match.groupCount >= 1) {
+            final name = match.group(1)?.trim() ?? 'Unknown Food';
+            final calories = _parseDoubleValue(match.group(2)) ?? 0.0;
+            final protein = _parseDoubleValue(match.group(3)) ?? 0.0;
+            final carbs = _parseDoubleValue(match.group(4)) ?? 0.0;
+            final fat = _parseDoubleValue(match.group(5)) ?? 0.0;
+
+            items.add({
+              'id': DateTime.now().millisecondsSinceEpoch.toString(),
+              'name': name,
+              'nutrition': {
+                'calories': calories,
+                'protein': protein,
+                'carbs': carbs,
+                'fat': fat,
+                'nutrients': [
+                  {'name': 'Protein', 'amount': protein, 'unit': 'g'},
+                  {'name': 'Carbohydrates', 'amount': carbs, 'unit': 'g'},
+                  {'name': 'Fat', 'amount': fat, 'unit': 'g'},
+                ]
+              }
+            });
+          }
+        }
+
+        if (items.isNotEmpty) {
+          print('Extracted ${items.length} items using regex');
+          return items;
+        }
+
+        // If still no results, use the fallback provider directly
+        print('No structured data found, using fallback provider');
+        // Just return default foods as we removed the database
+        return _getDefaultFoodItems(query);
+      }
     } catch (e) {
       print('Error extracting food items from OpenAI response: $e');
-      // Return results from fallback database
-      return _searchFallbackDatabase(query);
+      // Return default food items
+      return _getDefaultFoodItems(query);
     }
+  }
+
+  /// Get default food items when parsing fails
+  List<dynamic> _getDefaultFoodItems(String query) {
+    // Default food suggestions for fallback
+    return [
+      {
+        'id': DateTime.now().millisecondsSinceEpoch.toString() + '1',
+        'name': 'Apple (suggested)',
+        'nutrition': {
+          'calories': 95.0,
+          'protein': 0.5,
+          'carbs': 25.0,
+          'fat': 0.3,
+          'nutrients': [
+            {'name': 'Protein', 'amount': 0.5, 'unit': 'g'},
+            {'name': 'Carbohydrates', 'amount': 25.0, 'unit': 'g'},
+            {'name': 'Fat', 'amount': 0.3, 'unit': 'g'},
+          ]
+        }
+      },
+      {
+        'id': DateTime.now().millisecondsSinceEpoch.toString() + '2',
+        'name': 'Banana (suggested)',
+        'nutrition': {
+          'calories': 105.0,
+          'protein': 1.3,
+          'carbs': 27.0,
+          'fat': 0.4,
+          'nutrients': [
+            {'name': 'Protein', 'amount': 1.3, 'unit': 'g'},
+            {'name': 'Carbohydrates', 'amount': 27.0, 'unit': 'g'},
+            {'name': 'Fat', 'amount': 0.4, 'unit': 'g'},
+          ]
+        }
+      },
+      {
+        'id': DateTime.now().millisecondsSinceEpoch.toString() + '3',
+        'name': 'Chicken (suggested)',
+        'nutrition': {
+          'calories': 165.0,
+          'protein': 31.0,
+          'carbs': 0.0,
+          'fat': 3.6,
+          'nutrients': [
+            {'name': 'Protein', 'amount': 31.0, 'unit': 'g'},
+            {'name': 'Carbohydrates', 'amount': 0.0, 'unit': 'g'},
+            {'name': 'Fat', 'amount': 3.6, 'unit': 'g'},
+          ]
+        }
+      }
+    ];
   }
 
   /// Parse a numeric value from various formats
@@ -430,86 +543,6 @@ class FoodApiService {
       return double.tryParse(cleanValue);
     }
     return null;
-  }
-
-  /// Search fallback food database (simple in-memory database)
-  List<dynamic> _searchFallbackDatabase(String query) {
-    final lowerQuery = query.toLowerCase();
-    final results = <Map<String, dynamic>>[];
-
-    // Simple food database for fallback
-    final foodDatabase = {
-      "apple": {"calories": 95.0, "protein": 0.5, "carbs": 25.0, "fat": 0.3},
-      "banana": {"calories": 105.0, "protein": 1.3, "carbs": 27.0, "fat": 0.4},
-      "orange": {"calories": 65.0, "protein": 1.3, "carbs": 16.0, "fat": 0.2},
-      "pizza": {"calories": 285.0, "protein": 12.0, "carbs": 39.0, "fat": 10.0},
-      "burger": {
-        "calories": 350.0,
-        "protein": 20.0,
-        "carbs": 33.0,
-        "fat": 15.0
-      },
-      "salad": {"calories": 150.0, "protein": 3.0, "carbs": 10.0, "fat": 10.0},
-      "chicken": {"calories": 165.0, "protein": 31.0, "carbs": 0.0, "fat": 3.6},
-      "rice": {"calories": 130.0, "protein": 2.7, "carbs": 28.0, "fat": 0.3}
-    };
-
-    // Find matching foods
-    for (final entry in foodDatabase.entries) {
-      if (entry.key.contains(lowerQuery) || lowerQuery.contains(entry.key)) {
-        results.add({
-          'id': entry.key,
-          'name':
-              entry.key.substring(0, 1).toUpperCase() + entry.key.substring(1),
-          'nutrition': {
-            'calories': entry.value['calories'],
-            'protein': entry.value['protein'],
-            'carbs': entry.value['carbs'],
-            'fat': entry.value['fat'],
-            'nutrients': [
-              {
-                'name': 'Protein',
-                'amount': entry.value['protein'],
-                'unit': 'g'
-              },
-              {
-                'name': 'Carbohydrates',
-                'amount': entry.value['carbs'],
-                'unit': 'g'
-              },
-              {'name': 'Fat', 'amount': entry.value['fat'], 'unit': 'g'},
-            ]
-          }
-        });
-      }
-    }
-
-    // Return at least 3 items (add default items if needed)
-    if (results.isEmpty) {
-      // Default items
-      final defaultItems = ['apple', 'banana', 'chicken'];
-      for (final item in defaultItems) {
-        final food = foodDatabase[item]!;
-        results.add({
-          'id': item,
-          'name':
-              '${item.substring(0, 1).toUpperCase() + item.substring(1)} (suggested)',
-          'nutrition': {
-            'calories': food['calories'],
-            'protein': food['protein'],
-            'carbs': food['carbs'],
-            'fat': food['fat'],
-            'nutrients': [
-              {'name': 'Protein', 'amount': food['protein'], 'unit': 'g'},
-              {'name': 'Carbohydrates', 'amount': food['carbs'], 'unit': 'g'},
-              {'name': 'Fat', 'amount': food['fat'], 'unit': 'g'},
-            ]
-          }
-        });
-      }
-    }
-
-    return results;
   }
 
   /// Log error for analytics (minimal data usage)
