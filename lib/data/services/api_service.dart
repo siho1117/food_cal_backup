@@ -4,21 +4,23 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'fallback_provider.dart';
 
-/// Service to interact with OpenAI API for food recognition with Google Vision API fallback
+/// Service to interact with OpenAI API for food recognition with Taiwan VM proxy as fallback
 class FoodApiService {
   // Singleton instance
   static final FoodApiService _instance = FoodApiService._internal();
   factory FoodApiService() => _instance;
-  FoodApiService._internal() {
-    _fallbackProvider = FallbackProvider();
-  }
+  FoodApiService._internal();
 
   // OpenAI configuration
   final String _openAIBaseUrl = 'api.openai.com';
   final String _openAIImagesEndpoint = '/v1/chat/completions';
-  late FallbackProvider _fallbackProvider;
+
+  // Taiwan VM proxy configuration
+  final String _vmProxyUrl =
+      'your-vm-domain.com'; // Update with your actual VM domain
+  final String _vmProxyEndpoint =
+      '/api/openai-proxy'; // Update with your actual endpoint
 
   // OpenAI model names
   final String _visionModel = 'gpt-4.1-mini';
@@ -42,11 +44,11 @@ class FoodApiService {
     return key;
   }
 
-  // Get Google Vision API key from environment variables
-  String get _googleApiKey {
-    final key = dotenv.env['GOOGLE_API_KEY'] ?? dotenv.env['API_KEY'];
+  // Get Taiwan VM API key from environment variables
+  String get _vmApiKey {
+    final key = dotenv.env['VM_API_KEY'];
     if (key == null || key.isEmpty) {
-      print('WARNING: Google API key not found in .env file');
+      print('WARNING: VM_API_KEY not found in .env file');
       return '';
     }
     return key;
@@ -67,11 +69,19 @@ class FoodApiService {
     } catch (e) {
       // Log the error for analytics
       await _logError('OpenAI', e.toString());
-      print('OpenAI error, falling back to Google Vision: $e');
+      print('OpenAI direct access error, trying via Taiwan VM: $e');
 
-      // Fall back to Google Vision
-      return await _fallbackProvider.analyzeImage(
-          imageFile, _googleApiKey, _visionModel);
+      try {
+        // Try through Taiwan VM proxy as a fallback
+        return await _analyzeWithOpenAIViaVM(imageFile);
+      } catch (vmError) {
+        // Log the VM error
+        await _logError('VM Proxy', vmError.toString());
+        print('Taiwan VM proxy error: $vmError');
+
+        // Return an undefined food item response if both methods fail
+        return _getUndefinedFoodResponse();
+      }
     } finally {
       // Increment quota usage regardless of which service was used
       await incrementQuotaUsage();
@@ -137,6 +147,49 @@ class FoodApiService {
     return _extractFoodInfoFromOpenAI(responseData);
   }
 
+  /// Access OpenAI through Taiwan VM proxy when direct access fails
+  Future<Map<String, dynamic>> _analyzeWithOpenAIViaVM(File imageFile) async {
+    // Convert image to base64
+    final bytes = await imageFile.readAsBytes();
+    final base64Image = base64Encode(bytes);
+
+    // Create request body for the Taiwan VM with the same information we'd send to OpenAI
+    final requestBody = {
+      "imageData": base64Image,
+      "model": _visionModel,
+      "systemPrompt":
+          "You are a food recognition system. Identify the food item in the image with a concise name (1-7 words maximum) and provide nutritional information. Use common food names that would appear in a food database.",
+      "userPrompt":
+          "What single food item is in this image? Reply in this exact format:\nFood Name: [concise name, 1-7 words]\nCalories: [number] cal\nProtein: [number] g\nCarbs: [number] g\nFat: [number] g\n\nIf you can't identify the food or the image doesn't contain food, respond with \"Food Name: Unidentified Food Item\" and provide estimated nutritional values."
+    };
+
+    // Send request to Taiwan VM proxy
+    final uri = Uri.https(_vmProxyUrl, _vmProxyEndpoint);
+    final response = await http
+        .post(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+            'Client-API-Key': _vmApiKey,
+          },
+          body: jsonEncode(requestBody),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'VM Proxy error: ${response.statusCode}, ${response.body}');
+    }
+
+    // Parse VM proxy response
+    final responseData = jsonDecode(response.body);
+    print('VM Proxy Response: $responseData');
+
+    // Extract food information from VM response
+    // Note: The VM should return data in the same format as OpenAI
+    return _extractFoodInfoFromOpenAI(responseData);
+  }
+
   /// Extract food information from OpenAI response
   Map<String, dynamic> _extractFoodInfoFromOpenAI(
       Map<String, dynamic> response) {
@@ -146,7 +199,7 @@ class FoodApiService {
       print('Extracted content: $content'); // Debug print
 
       // Initialize default values
-      String name = 'Unknown Food';
+      String name = 'Unidentified Food Item';
       double calories = 0.0;
       double protein = 0.0;
       double carbs = 0.0;
@@ -220,22 +273,27 @@ class FoodApiService {
       };
     } catch (e) {
       print('Error extracting food info from OpenAI response: $e');
-      // Return a default structure if parsing fails
-      return {
-        'category': {'name': 'Unidentified Food Item'},
-        'nutrition': {
-          'calories': 250.0,
-          'protein': 10.0,
-          'carbs': 30.0,
-          'fat': 12.0,
-          'nutrients': [
-            {'name': 'Protein', 'amount': 10.0, 'unit': 'g'},
-            {'name': 'Carbohydrates', 'amount': 30.0, 'unit': 'g'},
-            {'name': 'Fat', 'amount': 12.0, 'unit': 'g'},
-          ]
-        }
-      };
+      // Return an undefined food item response if parsing fails
+      return _getUndefinedFoodResponse();
     }
+  }
+
+  /// Get an undefined food item response
+  Map<String, dynamic> _getUndefinedFoodResponse() {
+    return {
+      'category': {'name': 'Unidentified Food Item'},
+      'nutrition': {
+        'calories': 0.0,
+        'protein': 0.0,
+        'carbs': 0.0,
+        'fat': 0.0,
+        'nutrients': [
+          {'name': 'Protein', 'amount': 0.0, 'unit': 'g'},
+          {'name': 'Carbohydrates', 'amount': 0.0, 'unit': 'g'},
+          {'name': 'Fat', 'amount': 0.0, 'unit': 'g'},
+        ]
+      }
+    };
   }
 
   /// Get detailed information about a specific food ingredient by name
@@ -251,11 +309,19 @@ class FoodApiService {
     } catch (e) {
       // Log the error for analytics
       await _logError('OpenAI', e.toString());
-      print('OpenAI error, falling back to Google Vision for text: $e');
+      print('OpenAI error, trying via Taiwan VM: $e');
 
-      // Fall back to Google Vision
-      return await _fallbackProvider.getFoodInformation(
-          name, _googleApiKey, _textModel);
+      try {
+        // Try through Taiwan VM proxy
+        return await _getFoodInfoFromOpenAIViaVM(name);
+      } catch (vmError) {
+        // Log the VM error
+        await _logError('VM Proxy', vmError.toString());
+        print('Taiwan VM proxy error: $vmError');
+
+        // Return an undefined food response if both methods fail
+        return _getUndefinedFoodResponse();
+      }
     } finally {
       // Increment quota usage regardless of which service was used
       await incrementQuotaUsage();
@@ -308,6 +374,45 @@ class FoodApiService {
     return _extractFoodInfoFromOpenAI(responseData);
   }
 
+  /// Get food information from OpenAI via Taiwan VM proxy
+  Future<Map<String, dynamic>> _getFoodInfoFromOpenAIViaVM(String name) async {
+    // Create request body for Taiwan VM proxy
+    final requestBody = {
+      "foodName": name,
+      "model": _textModel,
+      "requestType": "food_nutrition",
+      "systemPrompt":
+          "You are a nutritional information system. Provide detailed nutritional facts for food items in a structured format.",
+      "userPrompt":
+          "Provide nutritional information for $name. Reply in this exact format:\nFood Name: $name\nCalories: [number] cal\nProtein: [number] g\nCarbs: [number] g\nFat: [number] g"
+    };
+
+    // Send request to Taiwan VM proxy
+    final uri = Uri.https(_vmProxyUrl, _vmProxyEndpoint);
+    final response = await http
+        .post(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+            'Client-API-Key': _vmApiKey,
+          },
+          body: jsonEncode(requestBody),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'VM Proxy error: ${response.statusCode}, ${response.body}');
+    }
+
+    // Parse VM proxy response
+    final responseData = jsonDecode(response.body);
+    print('VM Proxy Response: $responseData');
+
+    // Extract food information from VM response
+    return _extractFoodInfoFromOpenAI(responseData);
+  }
+
   /// Search for foods by name
   Future<List<dynamic>> searchFoods(String query) async {
     // Check if we've exceeded our daily quota
@@ -321,11 +426,19 @@ class FoodApiService {
     } catch (e) {
       // Log the error for analytics
       await _logError('OpenAI', e.toString());
-      print('OpenAI error, falling back to Google Vision for search: $e');
+      print('OpenAI error, trying via Taiwan VM proxy: $e');
 
-      // Fall back to Google Vision
-      return await _fallbackProvider.searchFoods(
-          query, _googleApiKey, _textModel);
+      try {
+        // Try through Taiwan VM proxy
+        return await _searchFoodsWithOpenAIViaVM(query);
+      } catch (vmError) {
+        // Log the VM error
+        await _logError('VM Proxy', vmError.toString());
+        print('Taiwan VM proxy error: $vmError');
+
+        // Return an empty list if both methods fail
+        return [];
+      }
     } finally {
       // Increment quota usage regardless of which service was used
       await incrementQuotaUsage();
@@ -375,12 +488,50 @@ class FoodApiService {
     print('OpenAI Response: $responseData');
 
     // Extract food items from OpenAI response
-    return _extractFoodItemsFromOpenAI(responseData, query);
+    return _extractFoodItemsFromOpenAI(responseData);
+  }
+
+  /// Search for foods with OpenAI via Taiwan VM proxy
+  Future<List<dynamic>> _searchFoodsWithOpenAIViaVM(String query) async {
+    // Create request body for Taiwan VM proxy
+    final requestBody = {
+      "searchQuery": query,
+      "model": _textModel,
+      "requestType": "food_search",
+      "systemPrompt":
+          "You are a food database system. Provide food items matching the search query with concise names and nutritional information in a structured JSON format.",
+      "userPrompt":
+          "Find up to 5 food items matching '$query'. For each item, provide a concise name (1-7 words) and nutritional information. Format your response as a valid JSON array with each object having the format: {\"name\": \"Food Name\", \"calories\": number, \"protein\": number, \"carbs\": number, \"fat\": number}. Ensure the numbers are just numeric values without units."
+    };
+
+    // Send request to Taiwan VM proxy
+    final uri = Uri.https(_vmProxyUrl, _vmProxyEndpoint);
+    final response = await http
+        .post(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+            'Client-API-Key': _vmApiKey,
+          },
+          body: jsonEncode(requestBody),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'VM Proxy error: ${response.statusCode}, ${response.body}');
+    }
+
+    // Parse VM proxy response
+    final responseData = jsonDecode(response.body);
+    print('VM Proxy Response: $responseData');
+
+    // Extract food items from VM response
+    return _extractFoodItemsFromOpenAI(responseData);
   }
 
   /// Extract food items from OpenAI response
-  List<dynamic> _extractFoodItemsFromOpenAI(
-      Map<String, dynamic> response, String query) {
+  List<dynamic> _extractFoodItemsFromOpenAI(Map<String, dynamic> response) {
     try {
       // Get the content from the response
       final content = response['choices'][0]['message']['content'] as String;
@@ -469,68 +620,14 @@ class FoodApiService {
           return items;
         }
 
-        // If still no results, use the fallback provider directly
-        print('No structured data found, using fallback provider');
-        // Just return default foods as we removed the database
-        return _getDefaultFoodItems(query);
+        // If no items found, return empty list
+        return [];
       }
     } catch (e) {
-      print('Error extracting food items from OpenAI response: $e');
-      // Return default food items
-      return _getDefaultFoodItems(query);
+      print('Error extracting food items from response: $e');
+      // Return empty list on error
+      return [];
     }
-  }
-
-  /// Get default food items when parsing fails
-  List<dynamic> _getDefaultFoodItems(String query) {
-    // Default food suggestions for fallback
-    return [
-      {
-        'id': DateTime.now().millisecondsSinceEpoch.toString() + '1',
-        'name': 'Apple (suggested)',
-        'nutrition': {
-          'calories': 95.0,
-          'protein': 0.5,
-          'carbs': 25.0,
-          'fat': 0.3,
-          'nutrients': [
-            {'name': 'Protein', 'amount': 0.5, 'unit': 'g'},
-            {'name': 'Carbohydrates', 'amount': 25.0, 'unit': 'g'},
-            {'name': 'Fat', 'amount': 0.3, 'unit': 'g'},
-          ]
-        }
-      },
-      {
-        'id': DateTime.now().millisecondsSinceEpoch.toString() + '2',
-        'name': 'Banana (suggested)',
-        'nutrition': {
-          'calories': 105.0,
-          'protein': 1.3,
-          'carbs': 27.0,
-          'fat': 0.4,
-          'nutrients': [
-            {'name': 'Protein', 'amount': 1.3, 'unit': 'g'},
-            {'name': 'Carbohydrates', 'amount': 27.0, 'unit': 'g'},
-            {'name': 'Fat', 'amount': 0.4, 'unit': 'g'},
-          ]
-        }
-      },
-      {
-        'id': DateTime.now().millisecondsSinceEpoch.toString() + '3',
-        'name': 'Chicken (suggested)',
-        'nutrition': {
-          'calories': 165.0,
-          'protein': 31.0,
-          'carbs': 0.0,
-          'fat': 3.6,
-          'nutrients': [
-            {'name': 'Protein', 'amount': 31.0, 'unit': 'g'},
-            {'name': 'Carbohydrates', 'amount': 0.0, 'unit': 'g'},
-            {'name': 'Fat', 'amount': 3.6, 'unit': 'g'},
-          ]
-        }
-      }
-    ];
   }
 
   /// Parse a numeric value from various formats
