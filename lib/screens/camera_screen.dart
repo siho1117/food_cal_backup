@@ -1,6 +1,10 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:path_provider/path_provider.dart';
 import '../config/theme.dart';
 import '../widgets/custom_app_bar.dart';
 import 'food_recognition_results_screen.dart';
@@ -143,6 +147,60 @@ class CameraScreenState extends State<CameraScreen>
     }
   }
 
+  // Save the original image to the device's photo gallery
+  Future<void> _saveImageToGallery(File imageFile) async {
+    try {
+      final imageBytes = await imageFile.readAsBytes();
+      final result = await ImageGallerySaver.saveImage(
+          Uint8List.fromList(imageBytes),
+          quality: 100,
+          name: "FoodCal_${DateTime.now().millisecondsSinceEpoch}");
+
+      print('Image saved to gallery: $result');
+    } catch (e) {
+      print('Error saving image to gallery: $e');
+      // Non-critical error, continue with the app flow
+    }
+  }
+
+  // Create a minimal compressed version specifically for food recognition
+  Future<File> _compressImageForRecognition(File imageFile) async {
+    try {
+      // Create a temporary file path to store the compressed image
+      final tempDir = await getTemporaryDirectory();
+      final targetPath =
+          '${tempDir.path}/recognition_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      // Compress and resize the image to a minimum viable size for recognition
+      // Food recognition typically works well with 640x640 or even smaller
+      final result = await FlutterImageCompress.compressAndGetFile(
+        imageFile.absolute.path,
+        targetPath,
+        quality: 70, // Lower quality to minimize size
+        minWidth: 640, // Smaller width, sufficient for recognition
+        minHeight: 640, // Smaller height, sufficient for recognition
+        format: CompressFormat.jpeg,
+      );
+
+      if (result == null) {
+        print('Image compression failed, using original image');
+        return imageFile;
+      }
+
+      final originalSize = imageFile.lengthSync();
+      final compressedSize = File(result.path).lengthSync();
+      final compressionRatio = (1 - (compressedSize / originalSize)) * 100;
+
+      print(
+          'Image compressed: ${originalSize} bytes -> ${compressedSize} bytes (${compressionRatio.toStringAsFixed(2)}% reduction)');
+      return File(result.path);
+    } catch (e) {
+      print('Error compressing image: $e');
+      // If compression fails, return the original image
+      return imageFile;
+    }
+  }
+
   Future<void> capturePhoto() async {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized || _isCapturing) {
@@ -167,15 +225,22 @@ class CameraScreenState extends State<CameraScreen>
       }
 
       if (photo != null && mounted) {
+        // Save original image to gallery
+        await _saveImageToGallery(File(photo.path));
+
+        // Create a highly compressed version for food recognition
+        final File compressedImage =
+            await _compressImageForRecognition(File(photo.path));
+
         // Show meal type selection dialog
         final mealType = await _showMealTypeSelector();
 
         if (mealType != null && mounted) {
-          // Navigate to food recognition results screen
+          // Navigate to food recognition results screen with the compressed image
           final result = await Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => FoodRecognitionResultsScreen(
-                imageFile: File(photo.path),
+                imageFile: compressedImage,
                 mealType: mealType,
               ),
             ),

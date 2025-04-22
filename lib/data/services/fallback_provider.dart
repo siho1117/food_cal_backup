@@ -1,5 +1,6 @@
 // lib/data/services/fallback_provider.dart
 import 'dart:io';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async'; // Import for TimeoutException
@@ -23,6 +24,13 @@ class FallbackProvider {
     return key;
   }
 
+  // Generate a unique request ID
+  String _generateRequestId() {
+    return DateTime.now().millisecondsSinceEpoch.toString() +
+        '_' +
+        (1000 + Random().nextInt(9000)).toString();
+  }
+
   /// Analyze a food image using Taiwan VM proxy
   Future<Map<String, dynamic>> analyzeImage(
       File imageFile, String apiKey, String modelName) async {
@@ -31,13 +39,16 @@ class FallbackProvider {
       List<int> imageBytes = await imageFile.readAsBytes();
       String base64Image = base64Encode(imageBytes);
 
+      // Generate request ID
+      final requestId = _generateRequestId();
       print('Sending image to Taiwan VM proxy');
 
-      // Create request body for Taiwan VM proxy
+      // Create request body with requestId
       final requestBody = json.encode({
         "imageData": base64Image,
         "apiKey": apiKey, // Pass the original OpenAI API key to the VM
         "model": modelName,
+        "requestId": requestId,
         "systemPrompt":
             "You are a food recognition system. Identify the food item in the image with a concise name (1-7 words maximum) and provide nutritional information. Use common food names that would appear in a food database.",
         "userPrompt":
@@ -61,6 +72,13 @@ class FallbackProvider {
       // Process response
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body) as Map<String, dynamic>;
+
+        // Verify the requestId matches
+        if (responseData.containsKey('requestId') &&
+            responseData['requestId'] != requestId) {
+          throw Exception('Response ID mismatch. Possible data corruption.');
+        }
+
         print('Taiwan VM Proxy Response: ${response.body}');
         return _formatResponseForApp(responseData);
       } else {
@@ -267,11 +285,15 @@ class FallbackProvider {
     try {
       print('Getting food information via Taiwan VM proxy: $name');
 
+      // Generate request ID
+      final requestId = _generateRequestId();
+
       // Create request body for the VM proxy
       final requestBody = json.encode({
         "foodName": name,
         "apiKey": apiKey,
         "model": modelName,
+        "requestId": requestId,
         "requestType": "food_nutrition",
         "systemPrompt":
             "You are a nutritional information system. Provide detailed nutritional facts for food items in a structured format.",
@@ -300,6 +322,14 @@ class FallbackProvider {
 
       // Parse VM proxy response
       final responseData = json.decode(response.body);
+
+      // Verify the requestId matches
+      if (responseData is Map &&
+          responseData.containsKey('requestId') &&
+          responseData['requestId'] != requestId) {
+        throw Exception('Response ID mismatch. Possible data corruption.');
+      }
+
       print('VM Proxy Food Info Response: $responseData');
 
       // Format the response for our app
@@ -316,11 +346,15 @@ class FallbackProvider {
     try {
       print('Searching foods via Taiwan VM proxy: $query');
 
+      // Generate request ID
+      final requestId = _generateRequestId();
+
       // Create request body for Taiwan VM proxy
       final requestBody = json.encode({
         "searchQuery": query,
         "apiKey": apiKey,
         "model": modelName,
+        "requestId": requestId,
         "requestType": "food_search",
         "systemPrompt":
             "You are a food database system. Provide food items matching the search query with concise names and nutritional information in a structured JSON format.",
@@ -349,6 +383,14 @@ class FallbackProvider {
 
       // Parse VM proxy response
       final responseData = json.decode(response.body);
+
+      // Verify the requestId matches if it's a map
+      if (responseData is Map &&
+          responseData.containsKey('requestId') &&
+          responseData['requestId'] != requestId) {
+        throw Exception('Response ID mismatch. Possible data corruption.');
+      }
+
       print('VM Proxy Food Search Response: $responseData');
 
       // Extract and format food items
