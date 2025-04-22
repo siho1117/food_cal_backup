@@ -4,8 +4,9 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'fallback_provider.dart'; // Import for fallback mechanism
 
-/// Service to interact with OpenAI API for food recognition with Taiwan VM proxy as fallback
+/// Service to interact with OpenAI API for food recognition with fallback to Taiwan VM proxy
 class FoodApiService {
   // Singleton instance
   static final FoodApiService _instance = FoodApiService._internal();
@@ -16,13 +17,7 @@ class FoodApiService {
   final String _openAIBaseUrl = 'api.openai.com';
   final String _openAIImagesEndpoint = '/v1/chat/completions';
 
-  // Taiwan VM proxy configuration
-  final String _vmProxyUrl =
-      'your-vm-domain.com'; // Update with your actual VM domain
-  final String _vmProxyEndpoint =
-      '/api/openai-proxy'; // Update with your actual endpoint
-
-  // OpenAI model names
+  // OpenAI model names - updated per your requirement
   final String _visionModel = 'gpt-4.1-mini';
   final String _textModel = 'gpt-4.1-nano';
 
@@ -30,6 +25,9 @@ class FoodApiService {
   static const String _errorLogKey = 'api_error_log';
   static const String _quotaUsedKey = 'food_api_quota_used';
   static const String _quotaDateKey = 'food_api_quota_date';
+
+  // Fallback provider
+  final FallbackProvider _fallbackProvider = FallbackProvider();
 
   // Daily quota limit
   final int dailyQuotaLimit = 150;
@@ -39,16 +37,6 @@ class FoodApiService {
     final key = dotenv.env['OPENAI_API_KEY'];
     if (key == null || key.isEmpty) {
       print('WARNING: OPENAI_API_KEY not found in .env file');
-      return '';
-    }
-    return key;
-  }
-
-  // Get Taiwan VM API key from environment variables
-  String get _vmApiKey {
-    final key = dotenv.env['VM_API_KEY'];
-    if (key == null || key.isEmpty) {
-      print('WARNING: VM_API_KEY not found in .env file');
       return '';
     }
     return key;
@@ -69,22 +57,14 @@ class FoodApiService {
     } catch (e) {
       // Log the error for analytics
       await _logError('OpenAI', e.toString());
-      print('OpenAI direct access error, trying via Taiwan VM: $e');
+      print('OpenAI direct access error, trying fallback provider: $e');
 
-      try {
-        // Try through Taiwan VM proxy as a fallback
-        return await _analyzeWithOpenAIViaVM(imageFile);
-      } catch (vmError) {
-        // Log the VM error
-        await _logError('VM Proxy', vmError.toString());
-        print('Taiwan VM proxy error: $vmError');
-
-        // Return an undefined food item response if both methods fail
-        return _getUndefinedFoodResponse();
-      }
-    } finally {
-      // Increment quota usage regardless of which service was used
+      // Increment quota usage
       await incrementQuotaUsage();
+
+      // Use fallback provider (Taiwan VM proxy)
+      return await _fallbackProvider.analyzeImage(
+          imageFile, _openAIApiKey, _visionModel);
     }
   }
 
@@ -144,49 +124,6 @@ class FoodApiService {
     print('OpenAI Response: $responseData');
 
     // Extract food information from OpenAI response
-    return _extractFoodInfoFromOpenAI(responseData);
-  }
-
-  /// Access OpenAI through Taiwan VM proxy when direct access fails
-  Future<Map<String, dynamic>> _analyzeWithOpenAIViaVM(File imageFile) async {
-    // Convert image to base64
-    final bytes = await imageFile.readAsBytes();
-    final base64Image = base64Encode(bytes);
-
-    // Create request body for the Taiwan VM with the same information we'd send to OpenAI
-    final requestBody = {
-      "imageData": base64Image,
-      "model": _visionModel,
-      "systemPrompt":
-          "You are a food recognition system. Identify the food item in the image with a concise name (1-7 words maximum) and provide nutritional information. Use common food names that would appear in a food database.",
-      "userPrompt":
-          "What single food item is in this image? Reply in this exact format:\nFood Name: [concise name, 1-7 words]\nCalories: [number] cal\nProtein: [number] g\nCarbs: [number] g\nFat: [number] g\n\nIf you can't identify the food or the image doesn't contain food, respond with \"Food Name: Unidentified Food Item\" and provide estimated nutritional values."
-    };
-
-    // Send request to Taiwan VM proxy
-    final uri = Uri.https(_vmProxyUrl, _vmProxyEndpoint);
-    final response = await http
-        .post(
-          uri,
-          headers: {
-            'Content-Type': 'application/json',
-            'Client-API-Key': _vmApiKey,
-          },
-          body: jsonEncode(requestBody),
-        )
-        .timeout(const Duration(seconds: 15));
-
-    if (response.statusCode != 200) {
-      throw Exception(
-          'VM Proxy error: ${response.statusCode}, ${response.body}');
-    }
-
-    // Parse VM proxy response
-    final responseData = jsonDecode(response.body);
-    print('VM Proxy Response: $responseData');
-
-    // Extract food information from VM response
-    // Note: The VM should return data in the same format as OpenAI
     return _extractFoodInfoFromOpenAI(responseData);
   }
 
@@ -309,22 +246,14 @@ class FoodApiService {
     } catch (e) {
       // Log the error for analytics
       await _logError('OpenAI', e.toString());
-      print('OpenAI error, trying via Taiwan VM: $e');
+      print('OpenAI error, using fallback provider: $e');
 
-      try {
-        // Try through Taiwan VM proxy
-        return await _getFoodInfoFromOpenAIViaVM(name);
-      } catch (vmError) {
-        // Log the VM error
-        await _logError('VM Proxy', vmError.toString());
-        print('Taiwan VM proxy error: $vmError');
-
-        // Return an undefined food response if both methods fail
-        return _getUndefinedFoodResponse();
-      }
-    } finally {
-      // Increment quota usage regardless of which service was used
+      // Increment quota usage
       await incrementQuotaUsage();
+
+      // Use fallback provider
+      return await _fallbackProvider.getFoodInformation(
+          name, _openAIApiKey, _textModel);
     }
   }
 
@@ -374,45 +303,6 @@ class FoodApiService {
     return _extractFoodInfoFromOpenAI(responseData);
   }
 
-  /// Get food information from OpenAI via Taiwan VM proxy
-  Future<Map<String, dynamic>> _getFoodInfoFromOpenAIViaVM(String name) async {
-    // Create request body for Taiwan VM proxy
-    final requestBody = {
-      "foodName": name,
-      "model": _textModel,
-      "requestType": "food_nutrition",
-      "systemPrompt":
-          "You are a nutritional information system. Provide detailed nutritional facts for food items in a structured format.",
-      "userPrompt":
-          "Provide nutritional information for $name. Reply in this exact format:\nFood Name: $name\nCalories: [number] cal\nProtein: [number] g\nCarbs: [number] g\nFat: [number] g"
-    };
-
-    // Send request to Taiwan VM proxy
-    final uri = Uri.https(_vmProxyUrl, _vmProxyEndpoint);
-    final response = await http
-        .post(
-          uri,
-          headers: {
-            'Content-Type': 'application/json',
-            'Client-API-Key': _vmApiKey,
-          },
-          body: jsonEncode(requestBody),
-        )
-        .timeout(const Duration(seconds: 10));
-
-    if (response.statusCode != 200) {
-      throw Exception(
-          'VM Proxy error: ${response.statusCode}, ${response.body}');
-    }
-
-    // Parse VM proxy response
-    final responseData = jsonDecode(response.body);
-    print('VM Proxy Response: $responseData');
-
-    // Extract food information from VM response
-    return _extractFoodInfoFromOpenAI(responseData);
-  }
-
   /// Search for foods by name
   Future<List<dynamic>> searchFoods(String query) async {
     // Check if we've exceeded our daily quota
@@ -426,22 +316,14 @@ class FoodApiService {
     } catch (e) {
       // Log the error for analytics
       await _logError('OpenAI', e.toString());
-      print('OpenAI error, trying via Taiwan VM proxy: $e');
+      print('OpenAI error, using fallback provider: $e');
 
-      try {
-        // Try through Taiwan VM proxy
-        return await _searchFoodsWithOpenAIViaVM(query);
-      } catch (vmError) {
-        // Log the VM error
-        await _logError('VM Proxy', vmError.toString());
-        print('Taiwan VM proxy error: $vmError');
-
-        // Return an empty list if both methods fail
-        return [];
-      }
-    } finally {
-      // Increment quota usage regardless of which service was used
+      // Increment quota usage
       await incrementQuotaUsage();
+
+      // Use fallback provider
+      return await _fallbackProvider.searchFoods(
+          query, _openAIApiKey, _textModel);
     }
   }
 
@@ -488,45 +370,6 @@ class FoodApiService {
     print('OpenAI Response: $responseData');
 
     // Extract food items from OpenAI response
-    return _extractFoodItemsFromOpenAI(responseData);
-  }
-
-  /// Search for foods with OpenAI via Taiwan VM proxy
-  Future<List<dynamic>> _searchFoodsWithOpenAIViaVM(String query) async {
-    // Create request body for Taiwan VM proxy
-    final requestBody = {
-      "searchQuery": query,
-      "model": _textModel,
-      "requestType": "food_search",
-      "systemPrompt":
-          "You are a food database system. Provide food items matching the search query with concise names and nutritional information in a structured JSON format.",
-      "userPrompt":
-          "Find up to 5 food items matching '$query'. For each item, provide a concise name (1-7 words) and nutritional information. Format your response as a valid JSON array with each object having the format: {\"name\": \"Food Name\", \"calories\": number, \"protein\": number, \"carbs\": number, \"fat\": number}. Ensure the numbers are just numeric values without units."
-    };
-
-    // Send request to Taiwan VM proxy
-    final uri = Uri.https(_vmProxyUrl, _vmProxyEndpoint);
-    final response = await http
-        .post(
-          uri,
-          headers: {
-            'Content-Type': 'application/json',
-            'Client-API-Key': _vmApiKey,
-          },
-          body: jsonEncode(requestBody),
-        )
-        .timeout(const Duration(seconds: 10));
-
-    if (response.statusCode != 200) {
-      throw Exception(
-          'VM Proxy error: ${response.statusCode}, ${response.body}');
-    }
-
-    // Parse VM proxy response
-    final responseData = jsonDecode(response.body);
-    print('VM Proxy Response: $responseData');
-
-    // Extract food items from VM response
     return _extractFoodItemsFromOpenAI(responseData);
   }
 
